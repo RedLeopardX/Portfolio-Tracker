@@ -1,0 +1,2388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0B0E14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Portfolio Tracker</title>
+<link rel="manifest" href="manifest.json">
+<!-- favicon: dark rounded square + cyan reactor core, matching the header
+     orb's colors. SVG covers browser tabs; the PNGs are for browsers
+     without SVG favicon support and for iOS "Add to Home Screen", which
+     silently ignores an SVG apple-touch-icon. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230B0E14'/%3E%3Ccircle cx='32' cy='32' r='24' fill='none' stroke='%234DA2FF' stroke-width='2' opacity='.55'/%3E%3Ccircle cx='32' cy='32' r='12' fill='%236ED7FF'/%3E%3C/svg%3E">
+<link rel="icon" type="image/png" sizes="192x192" href="icon192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="appletouchicon.png">
+<!-- fonts are native OS stacks now (see --font-display/--font-body/--font-mono
+     in :root) — no webfont to load -->
+<style>
+:root{
+  --void:#0B0E14; --slate:#141924; --edge:#232B3A;
+  --ink:#E8EDF5; --mute:#7A889E;
+  --signal:#4ADE9B; --warn:#FFB347; --loss:#FF6B6B; --plan:#7C9BFF; --invest:#B18AFF;
+  --taxblue:#7DD3FC; --darkgreen:#1F8A5A; --accent:#4DA2FF;
+  --r:16px;
+  --glass-bg:rgba(255,255,255,.075);
+  --glass-bg-hi:rgba(255,255,255,.12);
+  --glass-border:rgba(255,255,255,.15);
+  --glass-hairline:rgba(255,255,255,.2);
+  --glass-shadow:0 14px 38px -14px rgba(0,0,0,.6), 0 1px 0 rgba(255,255,255,.08) inset;
+  --glass-blur:blur(30px) saturate(190%);
+  --ease-spring:cubic-bezier(.34,1.56,.64,1);
+  --ease-out:cubic-bezier(.22,1,.36,1);
+  /* native OS font stacks — -apple-system/ui-monospace are CSS Fonts Level 4
+     generics that resolve straight to SF Pro/SF Mono on Mac/iPhone/iPad
+     (and to each other OS's own system faces elsewhere), so headings, body
+     text and numbers all read as native rather than a loaded webfont */
+  --font-display:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --font-body:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --font-mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{overscroll-behavior-y:none;background:var(--void)}
+body{
+  overscroll-behavior-y:none;
+  background:
+    radial-gradient(900px 500px at 12% -8%, rgba(124,155,255,.16), transparent 60%),
+    radial-gradient(800px 480px at 92% 6%, rgba(177,138,255,.12), transparent 55%),
+    radial-gradient(1000px 700px at 50% 110%, rgba(77,162,255,.08), transparent 60%),
+    var(--void);
+  color:var(--ink);font-family:var(--font-body),system-ui,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;padding-bottom:env(safe-area-inset-bottom)
+}
+/* skeleton shimmer while first prices are still in flight */
+body.loading .hero .big,body.loading .stat .v,body.loading .gaugepct{
+  color:transparent!important;
+  background:linear-gradient(90deg,rgba(255,255,255,.05) 25%,rgba(255,255,255,.14) 50%,rgba(255,255,255,.05) 75%);
+  background-size:200% 100%;
+  animation:shimmer 1.4s ease-in-out infinite;
+  border-radius:8px;
+}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}
+}
+.mono{font-family:var(--font-mono),monospace;font-variant-numeric:tabular-nums}
+
+header{position:sticky;top:0;z-index:60;background:rgba(14,17,25,.55);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border-bottom:1px solid var(--glass-border);box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 12px 30px -18px rgba(0,0,0,.6);padding:calc(13px + env(safe-area-inset-top)) 18px 0;transform:translateZ(0);-webkit-transform:translateZ(0);will-change:transform}
+.brand{display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+h1{font-family:var(--font-body),system-ui,sans-serif;font-size:clamp(26px,6vw,38px);font-weight:800;letter-spacing:-1px}
+
+/* "Jarvis" reactor dot: glowing cyan core, an expanding pulse ring,
+   and a thin scanning ring that spins around it while live */
+.pulse{width:52px;height:52px;flex:none;display:block;filter:drop-shadow(0 0 0 transparent);transition:filter .4s}
+.pulse.live{filter:drop-shadow(0 0 14px rgba(57,199,255,.5))}
+.pulse.err{filter:drop-shadow(0 0 14px rgba(255,107,107,.5))}
+.status{margin-left:auto;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px 10px}
+.statusrow{display:contents}
+.status small{color:var(--mute);font:500 11px var(--font-mono)}
+.filebtn{background:none;border:1px solid var(--glass-border);color:var(--mute);border-radius:99px;padding:3px 10px;font:600 10px var(--font-body);cursor:pointer;transition:transform .35s var(--ease-spring),background .2s,border-color .2s,color .2s}
+.filebtn:hover{border-color:var(--plan);color:var(--plan);background:var(--glass-bg)}
+.filebtn:active{transform:scale(.94)}
+.refresh{background:var(--glass-bg);backdrop-filter:blur(10px);border:1px solid var(--glass-border);color:var(--mute);border-radius:99px;padding:5px 11px;font:600 11px var(--font-body);cursor:pointer;transition:transform .35s var(--ease-spring),background .2s,border-color .2s,color .2s,box-shadow .2s}
+.refresh:hover{border-color:var(--signal);color:var(--signal);background:var(--glass-bg-hi);transform:translateY(-1px);box-shadow:0 6px 16px -8px rgba(74,222,155,.35)}
+.refresh:active{transform:scale(.94)}
+.refresh:disabled{opacity:.4;cursor:default}
+
+nav{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;margin-top:10px}
+nav::-webkit-scrollbar{display:none}
+nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--mute);font:600 12.5px var(--font-body);padding:9px 13px;cursor:pointer;white-space:nowrap;transition:color .2s,background .2s,border-color .25s var(--ease-out),transform .35s var(--ease-spring);border-radius:8px 8px 0 0}
+nav button:hover{color:var(--ink);background:rgba(255,255,255,.06);transform:translateY(-1px)}
+nav button:active{transform:scale(.95)}
+nav button.on{color:var(--ink);border-bottom-color:var(--accent);background:rgba(255,255,255,.05)}
+
+/* mobile bottom tab bar — hidden entirely on desktop, replaces the top
+   nav strip at mobile widths (see media query below) */
+.bottombar{display:none}
+.bottombar button{background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--mute);font:600 10px var(--font-body);cursor:pointer;padding:2px 6px;flex:1;min-width:0}
+.bottombar button svg{width:23px;height:23px;stroke:var(--mute);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:stroke .2s}
+.bottombar button.on{color:var(--accent)}
+.bottombar button.on svg{stroke:var(--accent);fill:rgba(77,162,255,.14)}
+.bottombar button span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60px}
+.bottombar button:active{transform:scale(.93)}
+
+main{padding:20px 18px 80px;max-width:1500px;margin:0 auto}
+.ptr{display:none}
+@media(max-width:640px){
+  /* pull-to-refresh: hidden (0 height) until dragged open by JS setting
+     --ptr-h / --ptr-op; overscroll-behavior-y:none suppresses the native
+     bounce, so this stands in for it */
+  .ptr{display:flex;align-items:center;justify-content:center;gap:8px;height:var(--ptr-h,0px);opacity:var(--ptr-op,0);overflow:hidden;color:var(--mute);font:600 11.5px var(--font-mono);transition:height .25s var(--ease-out),opacity .25s var(--ease-out)}
+  .ptr.snap{transition:height .25s var(--ease-spring),opacity .2s var(--ease-out)}
+  .ptr-spin{width:16px;height:16px;border-radius:50%;border:2px solid var(--glass-border);border-top-color:var(--accent);flex:none;transform:rotate(var(--ptr-rot,0deg))}
+  .ptr.loading .ptr-spin{animation:ptrspin .7s linear infinite}
+  @keyframes ptrspin{to{transform:rotate(360deg)}}
+}
+section{display:none}
+section.on{display:block}
+/* directional "swipe" transition between tabs — the incoming section
+   slides in from whichever side matches the tab's position relative to
+   the one you came from (further right in the tab order = enters from
+   the right, like paging forward), so tapping a tab feels the same as
+   swiping to it */
+section.on.slide-r{animation:slideInR .48s var(--ease-spring)}
+section.on.slide-l{animation:slideInL .48s var(--ease-spring)}
+@keyframes slideInR{from{opacity:0;transform:translateX(42px)}to{opacity:1;transform:none}}
+@keyframes slideInL{from{opacity:0;transform:translateX(-42px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){
+  section.on.slide-r,section.on.slide-l{animation:none}
+}
+
+.hero{background:linear-gradient(160deg,var(--glass-bg-hi),var(--glass-bg));backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border:1px solid var(--glass-border);border-radius:20px;padding:26px;margin-bottom:16px;box-shadow:var(--glass-shadow);position:relative;overflow:hidden;transition:transform .4s var(--ease-out),box-shadow .4s var(--ease-out),border-color .4s;-webkit-transform:translateZ(0)}
+.hero:hover{transform:translateY(-3px);box-shadow:0 20px 46px -16px rgba(0,0,0,.65),0 1px 0 rgba(255,255,255,.1) inset;border-color:var(--glass-hairline)}
+.hero::before{content:'';position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.10),rgba(255,255,255,0) 40%);pointer-events:none}
+.hero .k{color:var(--mute);font-size:14.5px;text-transform:uppercase;letter-spacing:1.1px;font-weight:600}
+.hero .big{font-family:var(--font-mono);font-size:clamp(36px,8.5vw,52px);font-weight:600;letter-spacing:-2px;margin:9px 0 4px;font-variant-numeric:tabular-nums}
+.hero .sub{display:flex;gap:10px 22px;flex-wrap:wrap;font-family:var(--font-mono);font-size:14.5px;color:var(--mute);margin-top:13px;line-height:1.5}
+.hero .sub b{font-weight:600}
+.histwrap.mini{position:relative;margin-top:14px}
+.histwrap.mini .histsvg{width:100%;height:56px;display:block;overflow:visible}
+.histline{fill:none;stroke:var(--accent);stroke-width:2;vector-effect:non-scaling-stroke}
+.histfill{stroke:none;fill:url(#histgrad)}
+.histempty{padding:8px 0 2px;color:var(--mute);font:500 11.5px var(--font-mono)}
+.herorow{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.herorow .hero{margin-bottom:0}
+.herorow .hero.main{flex:2 1 340px}
+.gaugecard{flex:1 1 220px;display:flex;flex-direction:column;justify-content:flex-start}
+.arcwrap{position:relative;width:100%;max-width:280px;margin:2px auto -8px;aspect-ratio:220/120}
+.arcsvg{width:100%;height:100%;display:block;overflow:visible}
+.arctrack{fill:none;stroke:rgba(0,0,0,.35);stroke-width:9;stroke-linecap:round}
+.arcfill{fill:none;stroke:url(#arcgrad);stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .6s cubic-bezier(.4,0,.2,1)}
+.arcfill.over{stroke:var(--signal)}
+.arcreadout{position:absolute;left:50%;top:78%;transform:translate(-50%,-50%);text-align:center;width:100%}
+.gaugepct{font-family:var(--font-mono);font-size:32px;font-weight:700;color:var(--ink);letter-spacing:-1px;margin:0}
+.gaugesub{margin-top:6px;font-family:var(--font-mono);font-size:13.5px;color:var(--mute);line-height:1.6;text-align:center}
+.gaugesub b{color:var(--ink);font-weight:600}
+@media(max-width:760px){.herorow{flex-direction:column}.herorow .hero.main{flex:none}}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:22px}
+.stat{background:var(--glass-bg);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border:1px solid var(--glass-border);border-radius:var(--r);padding:17px 19px;position:relative;overflow:hidden;box-shadow:var(--glass-shadow);transition:transform .35s var(--ease-out),box-shadow .35s var(--ease-out),border-color .35s}
+.stat:hover{transform:translateY(-3px) scale(1.015);box-shadow:0 16px 34px -14px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.08) inset;border-color:var(--glass-hairline)}
+.stat::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--edge)}
+.stat.good::before{background:var(--signal)}
+.stat.plan::before{background:var(--plan)}
+.stat.warn::before{background:var(--warn)}
+.stat.red::before{background:var(--loss)}
+.stat.invest::before{background:var(--invest)}
+.stat.tax::before{background:var(--taxblue)}
+.stat.dark::before{background:var(--darkgreen)}
+.stat .k{color:var(--mute);font-size:11.5px;text-transform:uppercase;letter-spacing:.9px;font-weight:600;margin-bottom:8px}
+.stat .v{font-family:var(--font-mono);font-size:24px;font-weight:600;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
+.stat .s{color:var(--mute);font-size:13px;margin-top:5px;font-family:var(--font-mono);line-height:1.4}
+
+.panel{background:var(--glass-bg);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border:1px solid var(--glass-border);border-radius:var(--r);margin-bottom:18px;overflow:hidden;box-shadow:var(--glass-shadow);-webkit-transform:translateZ(0)}
+.panel>h2{font-family:var(--font-display);font-size:13px;font-weight:600;padding:13px 15px;border-bottom:1px solid var(--glass-border);display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.03);text-transform:uppercase;letter-spacing:.5px}
+.panel>h2 .tag{margin-left:auto;font:500 10px var(--font-mono);color:var(--mute);text-transform:uppercase;letter-spacing:.8px}
+
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;min-width:880px}
+th{font:600 9.5px var(--font-body);text-transform:uppercase;letter-spacing:.8px;color:var(--mute);text-align:right;padding:9px 10px;border-bottom:1px solid var(--glass-border);white-space:nowrap;background:rgba(255,255,255,.03)}
+th:first-child,th.l{text-align:left}
+td{padding:0;border-bottom:1px solid rgba(35,43,58,.5);font-family:var(--font-mono);font-size:12.5px;text-align:right}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:rgba(255,255,255,.02)}
+tbody tr.rowin{animation:rowIn .4s var(--ease-out) backwards}
+@keyframes rowIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+/* Exit Plan's live figures change text (not just a number), so instead
+   of the roll-up counter used elsewhere they get a quick glow-pulse
+   pop to signal "this just moved" without counting through it */
+.flash{animation:flashPop .9s var(--ease-out)}
+@keyframes flashPop{
+  0%{text-shadow:0 0 0 rgba(0,0,0,0);transform:scale(1)}
+  20%{text-shadow:0 0 12px currentColor;transform:scale(1.16)}
+  100%{text-shadow:0 0 0 rgba(0,0,0,0);transform:scale(1)}
+}
+tr.lvl-hit{background:rgba(74,222,155,.07);box-shadow:inset 2px 0 0 var(--signal)}
+tr.lvl-hit:hover{background:rgba(74,222,155,.12)}
+td input,td select{width:100%;background:none;border:0;color:var(--ink);font:inherit;padding:9px 10px;text-align:right;outline:0}
+td input:focus{background:rgba(124,155,255,.09);box-shadow:inset 0 0 0 1px var(--plan)}
+td.l input,td.l select{text-align:left}
+td input::placeholder{color:#3E4859}
+select{appearance:none;cursor:pointer}
+select option{background:var(--slate)}
+.calc{padding:9px 10px}
+.calc.dim{color:var(--mute)}
+.pos{color:var(--signal)}
+.neg{color:var(--loss)}
+.narr{font:600 9.5px var(--font-body);text-transform:uppercase;letter-spacing:.6px;color:var(--mute)}
+.sym{font-family:var(--font-display);font-weight:800;font-size:13.5px;letter-spacing:-.3px;padding:9px 10px;display:flex;align-items:center;gap:7px}
+.rankbadge{color:var(--mute);font:600 10px var(--font-mono);min-width:26px}
+.coinimg{width:17px;height:17px;border-radius:50%;object-fit:cover;flex:none;background:var(--edge)}
+.trend{font-size:8px;margin-right:2px;display:inline-block}
+tfoot td{background:rgba(255,255,255,.03);font-weight:600;border-top:1px solid var(--glass-border);padding:10px}
+.del{background:none;border:0;color:#3E4859;cursor:pointer;font-size:15px;padding:6px 9px;line-height:1}
+.del:hover{color:var(--loss)}
+.chip{background:var(--glass-bg);backdrop-filter:blur(8px);border:1px solid var(--glass-border);color:var(--mute);border-radius:99px;font:600 9.5px var(--font-mono);padding:4px 8px;cursor:pointer;margin:0 6px;white-space:nowrap;transition:transform .3s var(--ease-spring),background .2s,border-color .2s,color .2s}
+.chip:hover{border-color:var(--plan);color:var(--plan);background:var(--glass-bg-hi);transform:translateY(-1px)}
+.chip:active{transform:scale(.92)}
+.chip.unset{border-color:var(--warn);color:var(--warn)}
+.chip.on{border-color:var(--signal);color:var(--signal)}
+.sellbtn{background:var(--glass-bg);backdrop-filter:blur(8px);border:1px solid var(--glass-border);color:var(--mute);border-radius:99px;font:600 9.5px var(--font-body);padding:4px 9px;cursor:pointer;white-space:nowrap;transition:transform .3s var(--ease-spring),background .2s,border-color .2s,color .2s}
+.sellbtn:hover{border-color:var(--warn);color:var(--warn);background:var(--glass-bg-hi);transform:translateY(-1px)}
+.sellbtn:active{transform:scale(.92)}
+
+.bar{padding:11px 15px;border-top:1px solid var(--glass-border);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button.act{background:var(--glass-bg);backdrop-filter:blur(10px);border:1px solid var(--glass-border);color:var(--ink);font:600 11.5px var(--font-body);padding:7px 14px;border-radius:99px;cursor:pointer;transition:transform .35s var(--ease-spring),background .2s,border-color .2s,color .2s,box-shadow .2s}
+button.act:hover{border-color:var(--signal);color:var(--signal);background:var(--glass-bg-hi);transform:translateY(-1px);box-shadow:0 8px 18px -10px rgba(74,222,155,.4)}
+button.act:active{transform:scale(.95)}
+button.act.solid{background:linear-gradient(160deg,rgba(74,222,155,.95),rgba(58,196,132,.95));border-color:rgba(74,222,155,.6);color:#04170D;box-shadow:0 4px 14px -4px rgba(74,222,155,.45)}
+button.act.solid:hover{opacity:.92;color:#04170D;transform:translateY(-1px) scale(1.02);box-shadow:0 10px 22px -6px rgba(74,222,155,.55)}
+button.act.solid:active{transform:scale(.95)}
+button.act.solid.plan{background:linear-gradient(160deg,rgba(124,155,255,.95),rgba(94,120,220,.95));border-color:rgba(124,155,255,.6);color:#0A1230;box-shadow:0 4px 14px -4px rgba(124,155,255,.45)}
+button.act.solid.plan:hover{box-shadow:0 10px 22px -6px rgba(124,155,255,.55)}
+button.act.solid.red{background:linear-gradient(160deg,rgba(255,107,107,.95),rgba(220,80,80,.95));border-color:rgba(255,107,107,.6);color:#2A0808;box-shadow:0 4px 14px -4px rgba(255,107,107,.45)}
+button.act.solid.red:hover{box-shadow:0 10px 22px -6px rgba(255,107,107,.55)}
+button.act.solid.tax{background:linear-gradient(160deg,rgba(125,211,252,.95),rgba(90,180,225,.95));border-color:rgba(125,211,252,.6);color:#062430;box-shadow:0 4px 14px -4px rgba(125,211,252,.45)}
+button.act.solid.tax:hover{box-shadow:0 10px 22px -6px rgba(125,211,252,.55)}
+.hint{color:var(--mute);font-size:11px;margin-left:auto;font-family:var(--font-mono)}
+
+.goalgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.goalrow{display:grid;grid-template-columns:1fr 140px 30px;gap:8px;padding:8px 15px;align-items:center;border-bottom:1px solid rgba(35,43,58,.5)}
+.goalrow input{background:none;border:0;color:var(--ink);font:inherit;outline:0;padding:5px 0;font-size:13px}
+.goalrow input.num{font-family:var(--font-mono);text-align:right}
+.goalrow input:focus{box-shadow:0 0 0 1px var(--plan);border-radius:4px;padding:5px 6px}
+.goalrow select{background:none;border:1px solid var(--edge);border-radius:6px;color:var(--ink);font:inherit;padding:6px;text-align:right}
+.goalrow .lbl{color:var(--mute);font-size:13px}
+
+/* goal list specifically gets roomier rows so it fills the card
+   height better instead of trailing off into empty space */
+#goallist .goalrow{grid-template-columns:1fr 160px 32px;padding:18px 20px;transition:background .2s}
+#goallist .goalrow:hover{background:rgba(255,255,255,.035)}
+#goallist .goalrow input{font-size:15.5px;padding:7px 0}
+#goallist .goalrow input.num{font-size:16.5px;font-weight:600}
+#goallist .goalrow input:focus{padding:7px 8px}
+
+.prog{padding:15px}
+.bararea{height:9px;background:rgba(0,0,0,.35);border-radius:99px;overflow:hidden;border:1px solid var(--glass-border);margin:9px 0 7px;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
+.fill{height:100%;background:linear-gradient(90deg,#5B2A8C,var(--taxblue));border-radius:99px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.fill.over{background:linear-gradient(90deg,var(--taxblue),#D6F3FF)}
+.plabel{display:flex;justify-content:space-between;font-size:11px;color:var(--mute);font-family:var(--font-mono)}
+.kv{display:grid;grid-template-columns:1fr auto;gap:0 12px;padding:6px 15px 13px;font-size:12.5px}
+.kv dt{color:var(--mute);padding:5px 0}
+.kv dd{font-family:var(--font-mono);text-align:right;font-variant-numeric:tabular-nums;padding:5px 0}
+.kv dt.rule,.kv dd.rule{border-top:1px solid var(--edge);margin-top:5px;padding-top:9px}
+.kv dt.big,.kv dd.big{font-weight:600;color:var(--ink);font-size:13.5px}
+
+.coinblock{border-bottom:1px solid var(--glass-border)}
+.coinblock:last-child{border-bottom:0}
+.chead{padding:11px 15px;display:flex;align-items:center;gap:11px;cursor:pointer;user-select:none;background:rgba(255,255,255,.03);transition:background .2s,transform .25s var(--ease-out)}
+.chead:hover{background:rgba(255,255,255,.06)}
+.chead:active{transform:scale(.992)}
+.chead .meta{margin-left:auto;display:flex;gap:14px;font-family:var(--font-mono);font-size:11px;color:var(--mute);flex-wrap:wrap;justify-content:flex-end}
+.chead .meta b{color:var(--ink);font-weight:600}
+.chev{color:var(--mute);font-size:10px;transition:.2s;display:inline-block}
+.coinblock.open .chev{transform:rotate(90deg)}
+.cbody{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .38s var(--ease-out),opacity .28s var(--ease-out)}
+.coinblock.open .cbody{grid-template-rows:1fr;opacity:1}
+.cbody>.cbodyinner{overflow:hidden;min-height:0;padding-bottom:12px}
+
+/* shared open/close animation for collapsible section bodies (Tracker) */
+.secbody{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .38s var(--ease-out),opacity .28s var(--ease-out)}
+.secbody.open{grid-template-rows:1fr;opacity:1}
+.secbody>.secinner{overflow:hidden;min-height:0}
+
+/* mobile Live positions widget cards — hidden on desktop (see #live-tablewrap
+   swap in the mobile media query below), collapsed row + tap-to-expand detail */
+.poslist{display:none;flex-direction:column}
+.poscard{border-bottom:1px solid rgba(35,43,58,.5)}
+.poscard:last-child{border-bottom:0}
+.pc-row{display:flex;align-items:center;gap:6px;padding:14px 4px;cursor:pointer;transition:background .2s}
+.pc-row:active{background:rgba(255,255,255,.04)}
+.pc-id{display:flex;align-items:center;gap:9px;flex:1 1 0;min-width:0}
+.pc-logo{width:32px;height:32px;border-radius:50%;flex:none;object-fit:cover;background:var(--edge)}
+.pc-name{font:700 15px var(--font-display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-sub{font:500 11.5px var(--font-mono);color:var(--mute);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-mid{flex:1 1 0;min-width:0;text-align:center}
+.pc-pl{font:700 16px var(--font-mono);white-space:nowrap}
+.pc-mid.pos .pc-pl{color:var(--signal)}
+.pc-mid.neg .pc-pl{color:var(--loss)}
+.pc-pct{display:inline-flex;align-items:center;gap:3px;font:700 11px var(--font-mono);padding:3px 7px;border-radius:8px;margin-top:5px;white-space:nowrap}
+.pc-mid.pos .pc-pct{color:var(--signal);background:rgba(74,222,155,.12)}
+.pc-mid.neg .pc-pct{color:var(--loss);background:rgba(255,107,107,.12)}
+.pc-price{flex:1 1 0;min-width:0;text-align:right}
+.pc-pricenum{font:700 15px var(--font-mono);white-space:nowrap}
+.pc-chg{font:600 11px var(--font-mono);margin-top:5px;white-space:nowrap}
+.pc-chg.pos{color:var(--signal)}
+.pc-chg.neg{color:var(--loss)}
+.pc-detailinner{padding:0 4px 14px;display:flex;flex-direction:column;gap:7px}
+.pc-detailrow{display:flex;justify-content:space-between;font:500 12px var(--font-mono);color:var(--mute)}
+.pc-detailrow b{color:var(--ink);font-weight:600}
+.alert{margin:9px 15px 0;padding:8px 11px;border-radius:7px;font-size:11.5px;font-family:var(--font-mono);line-height:1.55}
+.alert.bad{background:rgba(255,107,107,.1);color:var(--loss);border:1px solid rgba(255,107,107,.25)}
+.alert.ok{background:rgba(74,222,155,.08);color:var(--signal);border:1px solid rgba(74,222,155,.22)}
+.alert.info{background:rgba(124,155,255,.08);color:var(--plan);border:1px solid rgba(124,155,255,.22)}
+.alert.warn{background:rgba(255,179,71,.08);color:var(--warn);border:1px solid rgba(255,179,71,.22)}
+
+.empty{padding:38px 20px;text-align:center;color:var(--mute);font-size:13px}
+.empty::before{content:'';display:block;width:30px;height:30px;margin:0 auto 12px;border-radius:50%;border:2px solid var(--edge);background:linear-gradient(135deg,transparent 47%,var(--edge) 47%,var(--edge) 53%,transparent 53%)}
+.empty b{display:block;color:var(--ink);font-family:var(--font-display);font-size:15px;margin-bottom:5px;font-weight:600}
+
+.veil{position:fixed;inset:0;background:rgba(5,7,11,.55);backdrop-filter:blur(12px) saturate(140%);-webkit-backdrop-filter:blur(12px) saturate(140%);z-index:200;display:none;align-items:flex-start;justify-content:center;padding:60px 16px;opacity:0;transition:opacity .25s var(--ease-out)}
+.veil.on{display:flex;opacity:1}
+
+/* quick confirmation toasts — Export/Import/Add position, anything whose
+   only feedback was otherwise a silent state change */
+.toastwrap{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:300;display:flex;flex-direction:column-reverse;align-items:center;gap:8px;pointer-events:none;padding:0 16px;width:100%}
+.toast{background:rgba(20,25,36,.94);backdrop-filter:blur(16px) saturate(180%);-webkit-backdrop-filter:blur(16px) saturate(180%);border:1px solid var(--glass-hairline);border-radius:99px;padding:10px 18px;font:600 12.5px var(--font-body);color:var(--ink);box-shadow:0 14px 34px -12px rgba(0,0,0,.65);display:flex;align-items:center;gap:8px;white-space:nowrap;opacity:0;transform:translateY(10px) scale(.95);animation:toastIn .35s var(--ease-spring) forwards,toastOut .3s var(--ease-out) forwards 2.7s}
+.toast::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--signal);flex:none;box-shadow:0 0 8px var(--signal)}
+.toast.err::before{background:var(--loss);box-shadow:0 0 8px var(--loss)}
+@keyframes toastIn{to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes toastOut{to{opacity:0;transform:translateY(-8px) scale(.95)}}
+@media(max-width:640px){.toast{font-size:12px;padding:9px 15px;white-space:normal;text-align:center}}
+.modal{background:linear-gradient(165deg,rgba(30,36,50,.75),rgba(18,22,32,.75));backdrop-filter:blur(30px) saturate(180%);-webkit-backdrop-filter:blur(30px) saturate(180%);border:1px solid var(--glass-hairline);border-radius:20px;width:100%;max-width:430px;overflow:hidden;max-height:78vh;display:flex;flex-direction:column;box-shadow:0 20px 60px -15px rgba(0,0,0,.65),0 1px 0 rgba(255,255,255,.08) inset;animation:sheetIn .35s var(--ease-spring)}
+@keyframes sheetIn{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
+.sheethandle{display:none}
+@media(max-width:640px){
+  /* mobile: forms slide up as a bottom sheet instead of a centered dialog —
+     full width, flush to the bottom edge, with a drag handle you can pull
+     down to dismiss (native iOS sheet pattern) */
+  .veil{align-items:flex-end;padding:0}
+  .modal{max-width:100%;max-height:88vh;border-radius:20px 20px 0 0;padding-bottom:env(safe-area-inset-bottom);animation:sheetInUp .35s var(--ease-spring);transition:transform .3s var(--ease-spring)}
+  .modal.dragging{animation:none;transition:none}
+  @keyframes sheetInUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  .sheethandle{display:block;width:36px;height:5px;border-radius:99px;background:var(--glass-hairline);margin:9px auto 0;flex:none}
+}
+.modal h3{font-family:var(--font-display);font-size:14px;padding:14px 16px;border-bottom:1px solid var(--glass-border);display:flex;align-items:center}
+.modal h3 button{margin-left:auto;background:none;border:0;color:var(--mute);font-size:19px;cursor:pointer;line-height:1}
+.modal .srch{padding:12px 16px;border-bottom:1px solid var(--glass-border)}
+.modal .srch input{width:100%;background:rgba(0,0,0,.25);border:1px solid var(--glass-border);border-radius:10px;color:var(--ink);font:400 13px var(--font-body);padding:9px 11px;outline:0}
+.modal .srch input:focus{border-color:var(--plan)}
+.results{overflow-y:auto;flex:1}
+.res{padding:11px 16px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;display:flex;align-items:center;gap:11px;transition:background .2s,transform .2s var(--ease-out)}
+.res:hover{background:rgba(124,155,255,.1)}
+.res:active{transform:scale(.985)}
+.res img{width:22px;height:22px;border-radius:50%;background:var(--edge);flex:none}
+.res .nm{font-size:13px;font-weight:500}
+.res .id{font:400 10.5px var(--font-mono);color:var(--mute)}
+.res .rank{margin-left:auto;font:500 10px var(--font-mono);color:var(--mute)}
+.form{padding:14px 16px;overflow-y:auto}
+.fld{margin-bottom:12px}
+.fld label{display:block;color:var(--mute);font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:600;margin-bottom:5px}
+.fld input,.fld select{width:100%;background:rgba(0,0,0,.25);border:1px solid var(--glass-border);border-radius:10px;color:var(--ink);font:500 13.5px var(--font-mono);padding:9px 11px;outline:0}
+.fld input:focus,.fld select:focus{border-color:var(--plan)}
+.fld .note{color:var(--mute);font-size:11px;margin-top:5px;font-family:var(--font-mono)}
+.previewbox{background:rgba(0,0,0,.25);border:1px solid var(--glass-border);border-radius:10px;padding:11px;font-family:var(--font-mono);font-size:12px;line-height:1.8;margin-bottom:12px}
+.previewbox span{float:right;font-weight:600}
+.moreitem{width:100%;display:flex;align-items:center;gap:12px;padding:13px 10px;border-radius:12px;background:none;border:0;color:var(--ink);font:600 14.5px var(--font-body);cursor:pointer;text-align:left;transition:background .2s}
+.moreitem:hover,.moreitem:active{background:rgba(255,255,255,.06)}
+.moreitem svg{width:20px;height:20px;flex:none;stroke:var(--mute);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* price chart sheet — opened by tapping a row in Live positions. The line
+   takes its colour from the wrapper (green/red on the period's move) and
+   the gradient picks it up via currentColor, so one class covers both. */
+.chartwrap{padding:14px 16px 16px;color:var(--signal)}
+.chartwrap.neg{color:var(--loss)}
+.chartmeta{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:10px;font-family:var(--font-mono)}
+.chartprice{font-size:21px;font-weight:600;color:var(--ink)}
+.chartchg{font-size:13px;font-weight:600}
+.chartsvg{width:100%;height:170px;display:block;overflow:visible}
+.chartline{fill:none;stroke:currentColor;stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round}
+.chartfill{stroke:none}
+.chartref{stroke:var(--mute);stroke-width:1;stroke-dasharray:4 4;vector-effect:non-scaling-stroke;opacity:.55}
+/* dark halo via paint-order so the label stays readable where the price
+   line crosses behind it */
+.chartreflabel{fill:var(--ink);font:500 9.5px var(--font-mono);paint-order:stroke;stroke:rgba(11,14,20,.92);stroke-width:3.5px;stroke-linejoin:round}
+.chartaxis{display:flex;justify-content:space-between;color:var(--mute);font:500 10px var(--font-mono);margin-top:5px}
+.chartmsg{height:170px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--mute);font:500 12.5px var(--font-mono);padding:0 20px;line-height:1.6}
+.chartranges{display:flex;gap:6px;margin-top:14px}
+.chartranges button{flex:1;background:var(--glass-bg);border:1px solid var(--glass-border);color:var(--mute);border-radius:9px;font:600 11.5px var(--font-body);padding:8px 0;cursor:pointer;transition:background .2s,color .2s,border-color .2s}
+.chartranges button.on{background:rgba(77,162,255,.16);border-color:var(--accent);color:var(--accent)}
+.chartbtn{width:100%;margin-top:10px;background:var(--glass-bg);border:1px solid var(--glass-border);color:var(--ink);border-radius:10px;font:600 12.5px var(--font-body);padding:10px 0;cursor:pointer}
+.chartbtn:active{transform:scale(.98)}
+tr.clickrow{cursor:pointer}
+tr.clickrow:hover{background:rgba(77,162,255,.07)}
+tr.clickrow.chartopen{background:rgba(77,162,255,.10)}
+.chev{width:8px;height:8px;border-right:1.6px solid var(--mute);border-bottom:1.6px solid var(--mute);transform:rotate(-45deg);transition:transform .34s var(--ease-out),border-color .2s;flex:none;margin-right:2px}
+tr.clickrow.chartopen .chev{transform:rotate(45deg);border-color:var(--accent)}
+/* the expanding chart row: a grid animated 0fr -> 1fr, the same technique the
+   collapsible sections use — animates cleanly with no hard-coded height */
+tr.chartrow>td{padding:0;border-bottom:0}
+.chartexpand{display:grid;grid-template-rows:0fr;transition:grid-template-rows .38s var(--ease-out)}
+tr.chartrow.open .chartexpand{grid-template-rows:1fr}
+.chartexpand>div{overflow:hidden}
+/* the cell spans the whole table, which is wider than the panel when the
+   table is scrolling — stick the chart to the left edge and size it to the
+   visible width (set in JS) so it never runs off to the right */
+.chartexpandpad{border-bottom:1px solid rgba(35,43,58,.5);background:rgba(0,0,0,.22);position:sticky;left:0}
+.chartexpandpad .chartwrap{padding:14px 15px 16px}
+@media(prefers-reduced-motion:reduce){.chartexpand,.chev{transition:none}}
+
+@media(max-width:640px){
+  /* bottom tab bar replaces the top strip entirely on mobile — real
+     native apps don't show both */
+  main{padding:12px 10px calc(84px + env(safe-area-inset-bottom))}
+  header nav{display:none}
+  header{padding-left:14px;padding-right:14px;padding-bottom:14px}
+  .bottombar{display:flex;justify-content:space-around;align-items:flex-start;position:fixed;left:0;right:0;bottom:0;z-index:60;
+    background:rgba(14,17,25,.75);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+    border-top:1px solid var(--glass-border);padding:9px 4px calc(9px + env(safe-area-inset-bottom))}
+  .stat .v{font-size:17px}
+  .hero{padding:14px}
+  .herorow{gap:10px;margin-bottom:10px}
+  .stats{gap:8px;margin-bottom:14px}
+  .stat{padding:11px 13px}
+  .stat .k{margin-bottom:4px}
+  .stat .s{margin-top:3px}
+  .brand{gap:12px;margin-bottom:10px}
+  .pulse{width:40px;height:40px}
+  .status{width:100%;margin-left:0}
+  .panel{margin-bottom:12px}
+  .panel>h2{padding:10px 12px}
+  .arcwrap{margin:0 auto -6px}
+  .gaugesub{margin-top:3px}
+
+  /* stacked "card" layout for wide tables — avoids horizontal scrolling
+     through 10+ columns on a phone. Each row becomes a bordered card of
+     label:value lines instead of a table row. Padding is kept tight since
+     a full holdings list otherwise turns into a very long vertical scroll. */
+  table.stacktable{min-width:0!important}
+  table.stacktable thead{display:none}
+  table.stacktable,table.stacktable tbody,table.stacktable tfoot{display:block;width:100%}
+  table.stacktable tr{display:block;width:100%;border:1px solid var(--glass-border);border-radius:10px;padding:2px 10px;margin-bottom:6px;background:rgba(255,255,255,.02)}
+  table.stacktable tfoot tr{background:rgba(255,255,255,.05);margin-bottom:0}
+  table.stacktable td{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:5px 0;border-bottom:1px solid rgba(35,43,58,.5);text-align:right;min-height:0}
+  table.stacktable tr>td:last-child{border-bottom:0}
+  table.stacktable td:empty{display:none}
+  table.stacktable td::before{content:attr(data-label);color:var(--mute);font:600 9.5px var(--font-body);text-transform:uppercase;letter-spacing:.5px;flex:none;text-align:left}
+  table.stacktable td input,table.stacktable td select{width:auto;max-width:60%;flex:1;padding:5px 0}
+  table.stacktable td .sym{padding:0}
+  .bar{padding:10px 12px}
+  .empty{padding:24px 16px}
+
+  /* mobile Live positions: a compact widget row (name+qty, position value,
+     unrealised P/L + %, live price) instead of the stacked table, with the
+     rest of the columns tucked into a tap-to-expand detail panel */
+  #live-tablewrap{display:none}
+  .poslist{display:flex}
+
+  /* the Goals list uses a fixed-width value column that's wide enough to
+     clip on a narrow phone (the panel hides overflow, so it just cuts the
+     number off instead of wrapping) — narrow it and tighten padding */
+  #goallist .goalrow{grid-template-columns:1fr 104px 26px;padding:13px 14px}
+  #goallist .goalrow input.num{font-size:14.5px}
+}
+</style>
+</head>
+<body class="loading">
+
+<header>
+  <div class="brand">
+    <canvas class="pulse" id="dot"></canvas>
+    <h1>Portfolio Tracker</h1>
+    <div class="status">
+      <div class="statusrow">
+        <small id="stamp">connecting…</small>
+        <button class="refresh" id="refbtn" onclick="refresh()">Refresh</button>
+      </div>
+      <div class="statusrow filerow">
+        <button class="filebtn" onclick="exportData()">Export</button>
+        <button class="filebtn" onclick="importData()">Import</button>
+      </div>
+    </div>
+  </div>
+  <nav>
+    <button class="on" data-t="home">Home</button>
+    <button data-t="track">Tracker</button>
+    <button data-t="tax">Tax</button>
+    <button data-t="plan">Exit Plan</button>
+    <button data-t="buys">Future Buys</button>
+    <button data-t="goals">Goals</button>
+  </nav>
+</header>
+
+<!-- mobile-only: replaces the top tab strip with a thumb-reach bottom bar,
+     iOS-style. Future Buys + Goals live under "More" since a 6-wide bar
+     gets visually tight and starts truncating labels. -->
+<div class="bottombar" id="bottombar" role="navigation" aria-label="Primary">
+  <button class="on" data-t="home" onclick="activateTab('home')">
+    <svg viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h4v-6h2v6h4a1 1 0 0 0 1-1v-9"/></svg>
+    <span>Home</span>
+  </button>
+  <button data-t="track" onclick="activateTab('track')">
+    <svg viewBox="0 0 24 24"><path d="M4 19V10M10 19V5M16 19v-7M20 19V9"/></svg>
+    <span>Tracker</span>
+  </button>
+  <button data-t="tax" onclick="activateTab('tax')">
+    <svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+    <span>Tax</span>
+  </button>
+  <button data-t="plan" onclick="activateTab('plan')">
+    <svg viewBox="0 0 24 24"><path d="M4 19V5l4 2 4-2 4 2 4-2v14l-4 2-4-2-4 2-4-2Z"/></svg>
+    <span>Exit Plan</span>
+  </button>
+  <button id="morebtn" onclick="openMoreSheet()">
+    <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+    <span>More</span>
+  </button>
+</div>
+
+<div class="ptr" id="ptr"><div class="ptr-spin" id="ptrspin"></div><span id="ptrlabel">Pull to refresh</span></div>
+<main>
+
+<!-- HOME -->
+<section id="home" class="on">
+  <div class="herorow">
+    <div class="hero main">
+      <div class="k">Portfolio value</div>
+      <div class="big mono" id="hv">—</div>
+      <div class="sub">
+        <span>24h <b id="h24">—</b></span>
+        <span>Unrealised <b id="hpl">—</b></span>
+        <span>Realised <b id="hrl">—</b></span>
+        <span>Total invested <b id="hcb">—</b></span>
+        <span><b id="hmx">—</b> <span id="hmxlabel">of invested</span></span>
+      </div>
+      <div class="histwrap mini">
+        <svg viewBox="0 0 600 60" class="histsvg" id="histsvg" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="histgrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="var(--accent)" stop-opacity=".32"/>
+              <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path id="histfill" class="histfill"></path>
+          <path id="histline" class="histline"></path>
+        </svg>
+        <div class="histempty" id="histempty">No history yet — a point is logged every time prices refresh.</div>
+      </div>
+    </div>
+    <div class="hero gaugecard">
+      <div class="k">Goal progress <span style="font-weight:400;text-transform:none;letter-spacing:0;opacity:.7;font-size:12px;white-space:nowrap">· live, before tax</span></div>
+      <div class="arcwrap">
+        <svg viewBox="0 0 220 120" class="arcsvg">
+          <defs>
+            <linearGradient id="arcgrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="var(--plan)"/>
+              <stop offset="100%" stop-color="var(--signal)"/>
+            </linearGradient>
+          </defs>
+          <path class="arctrack" d="M20,100 A90,90 0 0 1 200,100"/>
+          <path class="arcfill" id="gaugearc" d="M20,100 A90,90 0 0 1 200,100"/>
+        </svg>
+        <div class="arcreadout"><div class="gaugepct" id="gaugepct">—</div></div>
+      </div>
+      <div class="gaugesub" id="gaugesub">—</div>
+    </div>
+  </div>
+  <div id="linkwarn"></div>
+  <div class="panel">
+    <h2>Live positions <span class="tag" id="fxtag">AUD</span></h2>
+    <div class="scroll" id="live-tablewrap">
+      <table id="live" class="stacktable">
+        <thead><tr>
+          <th class="l">Coin</th><th>Price (AUD)</th><th>24h</th><th>Holdings</th>
+          <th>Position value</th><th>% of portfolio</th><th>Cost basis</th><th>Unrealised P/L</th><th>Sell levels</th>
+        </tr></thead>
+        <tbody></tbody>
+        <tfoot><tr>
+          <td class="l" colspan="4" style="text-align:left;padding-left:10px">Total</td>
+          <td id="lv-val" data-label="Position value">—</td><td></td><td id="lv-cb" data-label="Cost basis">—</td><td id="lv-pl" data-label="Unrealised P/L">—</td><td></td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <div class="poslist" id="live-poslist"></div>
+  </div>
+</section>
+
+<!-- TRACKER -->
+<section id="track">
+  <div class="stats">
+    <div class="stat invest"><div class="k">Open cost basis</div><div class="v mono" id="s-cost">—</div><div class="s">still invested</div></div>
+    <div class="stat invest"><div class="k">Total invested</div><div class="v mono" id="s-total-inv">—</div><div class="s" id="s-total-invsub">cost basis + realised losses</div></div>
+    <div class="stat good"><div class="k">Exit revenue</div><div class="v mono" id="s-rev">—</div><div class="s">at target prices</div></div>
+    <div class="stat good"><div class="k">Projected gain</div><div class="v mono" id="s-prof">—</div><div class="s">on open positions</div></div>
+    <div class="stat tax"><div class="k">Net after CGT</div><div class="v mono" id="s-tax">—</div><div class="s" id="s-taxsub">—</div></div>
+    <div class="stat plan"><div class="k">Target multiple</div><div class="v mono" id="s-mult">—</div><div class="s">on total invested</div></div>
+  </div>
+
+  <div class="panel">
+    <h2 style="cursor:pointer" onclick="toggleSec('holdings')">
+      <span class="chev" id="chev-holdings">&#9654;</span> Open holdings
+      <span class="tag" id="h-count">0 positions</span>
+    </h2>
+    <div id="body-holdings" class="secbody"><div class="secinner">
+    <div class="scroll">
+      <table id="holdings" class="stacktable">
+        <thead><tr>
+          <th class="l">Narrative</th><th class="l">Coin</th><th class="l">Price feed</th><th>Amount</th><th>Avg buy</th>
+          <th>Invested</th><th>Avg sell</th><th>Multiple</th><th>Revenue</th>
+          <th>Gain</th><th class="l">CGT</th><th class="l"></th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+        <tfoot><tr>
+          <td class="l" colspan="5" style="text-align:left;padding-left:10px">Totals</td>
+          <td id="t-inv" data-label="Invested">—</td><td></td><td id="t-mult" data-label="Multiple">—</td>
+          <td id="t-rev" data-label="Revenue">—</td><td id="t-prof" data-label="Gain">—</td><td colspan="3"></td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <div class="bar">
+      <button class="act solid" onclick="openAddHolding()">+ Add position</button>
+      <span class="hint">"Sell" logs it and moves it to Realised sells</span>
+    </div>
+    </div></div>
+  </div>
+
+  <div class="panel">
+    <h2 style="cursor:pointer" onclick="toggleSec('trades')">
+      <span class="chev" id="chev-trades">&#9654;</span> Realised sells
+      <span class="tag" id="r-count">0 trades</span>
+    </h2>
+    <div id="body-trades" class="secbody"><div class="secinner">
+    <div class="scroll">
+      <table id="trades" class="stacktable">
+        <thead><tr>
+          <th class="l">Coin</th><th>Qty sold</th><th>Cost/unit</th><th>Sell price</th>
+          <th>Cost base</th><th>Proceeds</th><th>Gain / loss</th><th class="l">CGT</th><th class="l">Reinvested?</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+        <tfoot><tr>
+          <td class="l" colspan="4" style="text-align:left;padding-left:10px">Totals</td>
+          <td id="r-cost" data-label="Cost base">—</td><td id="r-proc" data-label="Proceeds">—</td><td id="r-gain" data-label="Gain / loss">—</td><td colspan="3"></td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <div class="bar">
+      <button class="act solid red" onclick="openAddTrade()">+ Add past sell</button>
+      <span class="hint">Losses here reduce tax on future gains</span>
+    </div>
+    </div></div>
+  </div>
+
+  <div class="panel">
+    <h2 style="cursor:pointer" onclick="toggleSec('settings')">
+      <span class="chev" id="chev-settings">&#9654;</span> Settings
+      <span class="tag">tax, discount</span>
+    </h2>
+    <div id="body-settings" class="secbody"><div class="secinner">
+    <div class="goalrow">
+      <span class="lbl">Tax method</span>
+      <select id="taxmethod" onchange="D.method=this.value;save();renderAll()">
+        <option value="brackets">ATO brackets</option><option value="flat">Flat rate</option>
+      </select><span></span>
+    </div>
+    <div class="goalrow" id="flatrow">
+      <span class="lbl">Flat marginal rate (%)</span>
+      <input class="num" id="taxrate" type="number" step="0.5" value="44" oninput="save();renderAll()"><span></span>
+    </div>
+    <div class="goalrow">
+      <span class="lbl">Prior-year losses carried forward (AUD)</span>
+      <input class="num" id="carry" type="number" step="any" value="0" oninput="D.carry=F.n(this.value)||0;save();renderAll()"><span></span>
+    </div>
+    <div class="goalrow">
+      <span class="lbl">Apply 50% CGT discount (held 12 months+)</span>
+      <select id="usediscount" onchange="D.useDiscount=this.value==='1';save();renderAll()">
+        <option value="1">Yes</option><option value="0">No</option>
+      </select><span></span>
+    </div>
+    <div class="goalrow" style="border-bottom:0">
+      <div class="lbl">Browser notifications<div style="font-size:11px;margin-top:3px;opacity:.75">Pings when a sell level or buy target is hit</div></div>
+      <button class="chip" id="notifybtn" onclick="toggleNotify()">Enable</button>
+      <span></span>
+    </div>
+    </div></div>
+  </div>
+
+  <div class="panel" id="privpanel">
+    <h2 style="cursor:pointer" onclick="toggleSec('priv')">
+      <span class="chev" id="chev-priv">&#9654;</span> Personal tax profile
+      <span class="tag" id="privtag">private · hidden</span>
+    </h2>
+    <div id="body-priv" class="secbody"><div class="secinner">
+      <div class="alert info" style="margin:12px 15px">
+        Kept out of every portfolio view. Only the resulting tax figures appear elsewhere — never the income itself.
+      </div>
+      <div class="goalrow">
+        <span class="lbl">Other taxable income (salary etc.)</span>
+        <input class="num" id="income" type="password" placeholder="0" oninput="D.income=F.n(this.value)||0;save();renderAll()"><span></span>
+      </div>
+      <div class="goalrow">
+        <span class="lbl">Show the value</span>
+        <select id="showinc" onchange="document.getElementById('income').type=this.value==='1'?'number':'password'">
+          <option value="0">No</option><option value="1">Yes</option>
+        </select><span></span>
+      </div>
+      <div class="goalrow" style="border-bottom:0">
+        <span class="lbl">Include 2% Medicare levy</span>
+        <select id="medicare" onchange="D.medicare=this.value==='1';save();renderAll()">
+          <option value="1">Yes</option><option value="0">No</option>
+        </select><span></span>
+      </div>
+    </div></div>
+  </div>
+</section>
+
+<!-- TAX -->
+<section id="tax">
+  <div class="stats">
+    <div class="stat good"><div class="k">Realised gains</div><div class="v mono" id="x-g">—</div><div class="s">sells at a profit</div></div>
+    <div class="stat red"><div class="k">Realised losses</div><div class="v mono" id="x-l">—</div><div class="s">sells at a loss</div></div>
+    <div class="stat red"><div class="k">Losses available</div><div class="v mono" id="x-avail">—</div><div class="s">including carried forward</div></div>
+    <div class="stat tax"><div class="k">Tax on realised</div><div class="v mono" id="x-tax">—</div><div class="s" id="x-taxsub">—</div></div>
+  </div>
+
+  <div class="goalgrid">
+    <div class="panel" style="margin:0">
+      <h2>Realised position <span class="tag">what you owe today</span></h2>
+      <dl class="kv" id="kv-real"></dl>
+    </div>
+    <div class="panel" style="margin:0">
+      <h2>Projected at exit targets <span class="tag">realised + remaining</span></h2>
+      <dl class="kv" id="kv-proj"></dl>
+    </div>
+  </div>
+</section>
+
+<!-- EXIT PLAN -->
+<section id="plan">
+  <div class="panel">
+    <h2>Sell levels by coin <span class="tag">% sold must total 100</span></h2>
+    <div id="planlist"></div>
+  </div>
+</section>
+
+<!-- BUYS -->
+<section id="buys">
+  <div class="stats">
+    <div class="stat invest"><div class="k">Capital allocated</div><div class="v mono" id="b-total">—</div><div class="s">across planned buys</div></div>
+    <div class="stat dark"><div class="k">Planned positions</div><div class="v mono" id="b-count">—</div><div class="s">entries queued</div></div>
+    <div class="stat good"><div class="k">Projected revenue</div><div class="v mono" id="b-rev">—</div><div class="s">at target sell</div></div>
+  </div>
+  <div class="stats">
+    <div class="stat good"><div class="k">Combined projected revenue</div><div class="v mono" id="cb-rev">—</div><div class="s" id="cb-revsub">—</div></div>
+    <div class="stat tax"><div class="k">Combined after tax</div><div class="v mono" id="cb-net">—</div><div class="s" id="cb-goalsub">—</div></div>
+  </div>
+  <div class="panel">
+    <h2>Buy queue <span class="tag">dry powder plan</span></h2>
+    <div class="scroll">
+      <table id="buytable" class="stacktable">
+        <thead><tr>
+          <th class="l">On</th><th class="l">Narrative</th><th class="l">Coin</th><th class="l">Price feed</th><th>Allocation</th><th>Target buy</th>
+          <th>Live price</th><th>vs target</th><th>Tokens</th><th>Target sell</th><th>Multiple</th><th>Revenue</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+        <tfoot><tr>
+          <td class="l" colspan="4" style="text-align:left;padding-left:10px">Totals <span class="hint" style="margin-left:6px" id="bt-note"></span></td>
+          <td id="bt-alloc" data-label="Allocation">—</td><td colspan="6"></td><td id="bt-rev" data-label="Revenue">—</td><td></td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <div class="bar"><button class="act solid plan" onclick="addBuy()">+ Add planned buy</button><span class="hint">Untick "On" to keep an entry without counting it</span></div>
+  </div>
+</section>
+
+<!-- GOALS -->
+<section id="goals">
+  <div class="goalgrid">
+    <div class="panel" style="margin:0">
+      <h2>Goals <span class="tag" id="g-total">—</span><span class="tag" id="g-total-pretax" style="color:var(--plan)">—</span></h2>
+      <div id="goallist"></div>
+      <div class="bar"><button class="act solid" onclick="addGoal()">+ Add goal</button></div>
+    </div>
+    <div class="panel" style="margin:0">
+      <h2>Progress <span class="tag">before tax</span></h2>
+      <div class="prog">
+        <div class="plabel"><span>At your target sell prices</span><span id="p-pct">—</span></div>
+        <div class="bararea"><div class="fill" id="p-fill" style="width:0"></div></div>
+        <div class="plabel"><span id="p-have">—</span><span id="p-need">—</span></div>
+      </div>
+      <div class="prog" style="padding-top:0">
+        <div class="plabel"><span style="opacity:.65">&#8627; after tax</span><span id="pat-pct">—</span></div>
+        <div class="bararea" style="height:6px"><div class="fill" id="pat-fill" style="width:0"></div></div>
+        <div class="plabel"><span id="pat-have">—</span><span id="pat-need">—</span></div>
+      </div>
+      <div class="prog" style="padding-top:0">
+        <div class="plabel"><span>At today's live prices</span><span id="p2-pct">—</span></div>
+        <div class="bararea"><div class="fill" id="p2-fill" style="width:0"></div></div>
+        <div class="plabel"><span id="p2-have">—</span><span id="p2-need">—</span></div>
+      </div>
+      <dl class="kv" id="kv-goal"></dl>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<div class="veil" id="veil" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modalwrap">
+    <div class="sheethandle" id="sheethandle"></div>
+    <div id="modalbox"></div>
+  </div>
+</div>
+<div class="toastwrap" id="toastwrap"></div>
+
+<script>
+const KEY='exitPortfolioV3';
+const F={
+  m:(n,d=0)=>{
+    if(n==null||isNaN(n)||!isFinite(n))return '—';
+    const neg=n<0;
+    return (neg?'-':'')+'$'+Math.abs(n).toLocaleString('en-AU',{minimumFractionDigits:d,maximumFractionDigits:d});
+  },
+  price:n=>{
+    if(n==null||isNaN(n))return '—';
+    const d=n>=100?2:n>=1?3:n>=0.01?4:6;
+    return '$'+Number(n).toLocaleString('en-AU',{minimumFractionDigits:d,maximumFractionDigits:d});
+  },
+  x:n=>n==null||isNaN(n)||!isFinite(n)?'—':n.toFixed(2)+'x',
+  p:n=>n==null||isNaN(n)||!isFinite(n)?'—':(n*100).toFixed(1)+'%',
+  q:n=>n==null||isNaN(n)?'—':Number(n).toLocaleString('en-AU',{maximumFractionDigits:2}),
+  n:v=>{const x=parseFloat(v);return isNaN(x)?null:x},
+  esc:s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'),
+  logo:img=>img?`<img class="coinimg" src="${F.esc(img)}" onerror="this.style.visibility='hidden'">`:''
+};
+
+let D={
+  taxRate:44, denom:'AUD', carry:0, useDiscount:false,
+  notifyEnabled:false, notified:{sell:{},buy:{}},
+  method:'brackets', income:0, medicare:true,
+  /* seeded empty — real data lives in localStorage and is restored by
+     load()'s Object.assign, so nothing personal ships with the file */
+  holdings:[],
+  trades:[],
+  buys:[],
+  goals:[]
+};
+
+let PX={}, FX=1.5, stamp=null;
+
+/* while a field is being typed into, every keystroke re-renders (so calc
+   columns stay live) — without this, that meant every single keystroke
+   replayed the number roll-up animation on every derived figure on screen.
+   Suppress the animation for the duration of the edit; it resumes once the
+   field is committed (Enter or blur), and the next real change animates
+   normally again. */
+let suppressAnim=false;
+document.addEventListener('input',e=>{
+  if(e.target&&e.target.matches&&e.target.matches('input,select'))suppressAnim=true;
+},true);
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&e.target&&e.target.matches&&e.target.matches('input'))e.target.blur();
+},true);
+document.addEventListener('focusout',e=>{
+  if(e.target&&e.target.matches&&e.target.matches('input,select'))suppressAnim=false;
+},true);
+
+/* animated number roll-up: eases an element's displayed number from
+   whatever it last showed to the new value, instead of snapping */
+function animateValue(el,newVal,formatFn,dur=650){
+  if(!el)return;
+  if(newVal==null||isNaN(newVal)||!isFinite(newVal)){el.textContent=formatFn(newVal);delete el.dataset.val;return}
+  if(suppressAnim){el.textContent=formatFn(newVal);el.dataset.val=newVal;return}
+  const prevRaw=el.dataset.val;
+  const from=prevRaw!==undefined&&prevRaw!==''?parseFloat(prevRaw):newVal;
+  el.dataset.val=newVal;
+  if(!isFinite(from)||from===newVal){el.textContent=formatFn(newVal);return}
+  const start=performance.now();
+  function step(now){
+    const t=Math.min((now-start)/dur,1);
+    const eased=1-Math.pow(1-t,3);
+    el.textContent=formatFn(from+(newVal-from)*eased);
+    if(t<1)requestAnimationFrame(step);else el.textContent=formatFn(newVal);
+  }
+  requestAnimationFrame(step);
+}
+/* same roll-up, but for cells inside tables that get fully rebuilt on
+   every render (so the old DOM node — and its dataset — is already
+   gone by the time we'd read it back); keyed off an external cache
+   that survives the rebuild instead */
+let _numCache={};
+function animateValueKeyed(key,el,newVal,formatFn,dur=650){
+  if(!el)return;
+  if(newVal==null||isNaN(newVal)||!isFinite(newVal)){el.textContent=formatFn(newVal);return}
+  if(suppressAnim){el.textContent=formatFn(newVal);_numCache[key]=newVal;return}
+  const from=_numCache[key]!==undefined?_numCache[key]:newVal;
+  _numCache[key]=newVal;
+  if(!isFinite(from)||from===newVal){el.textContent=formatFn(newVal);return}
+  el.textContent=formatFn(from);
+  const start=performance.now();
+  function step(now){
+    const t=Math.min((now-start)/dur,1);
+    const eased=1-Math.pow(1-t,3);
+    el.textContent=formatFn(from+(newVal-from)*eased);
+    if(t<1)requestAnimationFrame(step);else el.textContent=formatFn(newVal);
+  }
+  requestAnimationFrame(step);
+}
+
+function save(){
+  const t=document.getElementById('taxrate');
+  if(t)D.taxRate=F.n(t.value)??0;
+  try{localStorage.setItem(KEY,JSON.stringify(D))}catch(e){}
+}
+/* editable table rows are rebuilt via innerHTML on every keystroke (so calc
+   columns stay live) — that would normally yank focus + caret out of the
+   input mid-type. This remembers which field (by data-fkey) was focused and
+   its caret position, runs the re-render, then restores both. */
+function withFocusPreserved(fn){
+  const ae=document.activeElement;
+  const key=ae&&ae.dataset?ae.dataset.fkey:null;
+  const start=key&&ae.selectionStart!=null?ae.selectionStart:null;
+  const end=key&&ae.selectionEnd!=null?ae.selectionEnd:null;
+  // the re-render redraws this field's value from the *parsed* number, which
+  // drops anything the parse can't represent — a trailing "." or "-" typed
+  // mid-number, or "0" not shown after a leading zero. Keep the literal text
+  // the user typed so a decimal point never gets silently deleted on you.
+  const raw=key?ae.value:null;
+  fn();
+  if(key){
+    const el=document.querySelector(`[data-fkey="${key}"]`);
+    if(el){
+      if(raw!=null&&el.value!==raw)el.value=raw;
+      el.focus();
+      if(start!=null&&el.setSelectionRange){try{el.setSelectionRange(start,end)}catch(e){}}
+    }
+  }
+}
+function load(){
+  try{const r=localStorage.getItem(KEY);if(r)D=Object.assign(D,JSON.parse(r))}catch(e){}
+  normalize();
+}
+/* defaults/migrations + syncing D onto the static settings inputs — split
+   out from load() so importData() can run this over freshly-imported data
+   without load()'s own localStorage re-read clobbering it straight back */
+function normalize(){
+  D.trades=D.trades||[];D.carry=D.carry||0;D.history=D.history||[];
+  if(D.useDiscount===undefined)D.useDiscount=false;
+  D.notified=D.notified||{sell:{},buy:{}};
+  D.notified.sell=D.notified.sell||{};D.notified.buy=D.notified.buy||{};
+  if(D.notifyEnabled&&(!('Notification' in window)||Notification.permission!=='granted'))D.notifyEnabled=false;
+  /* one-off migration: prices used to be entered in USD — convert to AUD
+     at the last known rate, then drop the concept entirely */
+  if(D.denom==='USD'){
+    D.holdings.forEach(h=>{h.buy=(h.buy||0)*FX;h.sell=(h.sell||0)*FX});
+    D.buys.forEach(b=>{b.buy=(b.buy||0)*FX;b.sell=(b.sell||0)*FX});
+  }
+  D.denom='AUD';
+  document.getElementById('taxrate').value=D.taxRate;
+  document.getElementById('carry').value=D.carry;
+  document.getElementById('usediscount').value=D.useDiscount?'1':'0';
+  D.method=D.method||'brackets';
+  D.income=D.income||0;
+  if(D.medicare===undefined)D.medicare=true;
+  document.getElementById('taxmethod').value=D.method;
+  document.getElementById('medicare').value=D.medicare?'1':'0';
+  document.getElementById('income').value=D.income||'';
+  document.getElementById('flatrow').style.display=D.method==='flat'?'':'none';
+  updateNotifyUI();
+}
+function toggleSec(id,force){
+  const b=document.getElementById('body-'+id);
+  if(!b)return;
+  const open=force!==undefined?force:!b.classList.contains('open');
+  b.classList.toggle('open',open);
+  const c=document.getElementById('chev-'+id);
+  if(c)c.style.transform=open?'rotate(90deg)':'';
+  if(id==='priv'){
+    const t=document.getElementById('privtag');
+    if(t)t.textContent=open?'private · visible':'private · hidden';
+  }
+  if(force===undefined){D.ui=D.ui||{};D.ui[id]=open;save()}
+}
+function initSecs(){
+  D.ui=D.ui||{};
+  const def={holdings:true,trades:(D.trades||[]).length>0,settings:false,priv:false};
+  ['holdings','trades','settings','priv'].forEach(id=>{
+    toggleSec(id,D.ui[id]===undefined?def[id]:D.ui[id]);
+  });
+}
+
+const toAud=v=>v==null?null:v;
+const live=h=>h.id&&PX[h.id]?PX[h.id].aud:null;
+const taxR=()=>(F.n(document.getElementById('taxrate').value)??0)/100;
+const DR=()=>D.useDiscount?0.5:0;
+
+/* ATO resident brackets, FY2026-27 (from 1 July 2026).
+   The second bracket dropped from 16% to 15% on 1 July 2026. */
+const BRACKETS=[[18200,0],[45000,0.15],[135000,0.30],[190000,0.37],[Infinity,0.45]];
+function incomeTax(x){
+  if(!(x>0))return 0;
+  let t=0,prev=0;
+  for(const [cap,rate] of BRACKETS){
+    if(x>prev)t+=(Math.min(x,cap)-prev)*rate;
+    if(x<=cap)break;
+    prev=cap;
+  }
+  return t;
+}
+function levy(x){return D.medicare!==false&&x>0?x*0.02:0}
+function totalTax(x){return incomeTax(x)+levy(x)}
+
+/* Tax attributable to a net capital gain: the difference the gain
+   makes on top of the rest of your income, so bracket creep is real. */
+function taxOnGain(net){
+  if(!(net>0))return 0;
+  if(D.method==='flat')return net*taxR();
+  const base=D.income||0;
+  return totalTax(base+net)-totalTax(base);
+}
+function marginalOnGain(net){return net>0?taxOnGain(net)/net:0}
+function topBand(net){
+  if(D.method==='flat')return (taxR()*100).toFixed(0)+'% flat';
+  const top=(D.income||0)+Math.max(net,0);
+  const r=BRACKETS.find(b=>top<=b[0]);
+  return ((r?r[1]:0.45)*100).toFixed(0)+'% top bracket';
+}
+
+/* ===== CGT ENGINE =====
+   ATO order for individuals: gains − losses, THEN 50% discount on
+   what remains of the eligible gains. Losses hit non-discounted
+   gains first because that saves the most tax. */
+function applyCGT(gainDisc,gainFull,lossPool){
+  let L=lossPool;
+  const useF=Math.min(L,gainFull); gainFull-=useF; L-=useF;
+  const useD=Math.min(L,gainDisc); gainDisc-=useD; L-=useD;
+  const net=gainFull+gainDisc*(1-DR());
+  return {net,tax:taxOnGain(net),carryOut:L,discounted:gainDisc*DR(),usedLoss:lossPool-L};
+}
+
+function realisedBuckets(){
+  let gD=0,gF=0,loss=0,reinvestedLoss=0,proceeds=0,proceedsCashedOut=0,cost=0;
+  D.trades.forEach(t=>{
+    const pr=afterFee(toAud((t.qty||0)*(t.sell||0)))||0;
+    const cb=toAud((t.qty||0)*(t.buy||0))||0;
+    proceeds+=pr;cost+=cb;
+    /* proceeds that were put back into the portfolio are already sitting
+       inside your current holdings' value — only cashed-out proceeds are
+       still a separate pool of money on top of what you currently hold */
+    if(t.reinvested===false)proceedsCashedOut+=pr;
+    const g=pr-cb;
+    if(g>=0){ t.disc?gD+=g:gF+=g }
+    else{
+      loss+=-g;
+      /* a loss only still counts toward "total invested" if that capital
+         went back into the portfolio — money taken out and kept as cash
+         has already left the picture, so it shouldn't inflate what's
+         still considered "invested". Default true so existing trades
+         (logged before this field existed) keep their current behaviour. */
+      if(t.reinvested!==false)reinvestedLoss+=-g;
+    }
+  });
+  return {gD,gF,loss,reinvestedLoss,proceeds,proceedsCashedOut,cost,gain:proceeds-cost};
+}
+function realisedCGT(){
+  const b=realisedBuckets();
+  return Object.assign({},b,applyCGT(b.gD,b.gF,b.loss+(D.carry||0)),{pool:b.loss+(D.carry||0)});
+}
+/* projected = realised trades + exiting every open holding at its target */
+function projectedCGT(useLive){
+  const b=realisedBuckets();
+  /* proceeds start from only the cashed-out (non-reinvested) realised
+     trades — reinvested proceeds are already counted below, inside the
+     current holdings' own value, and adding both would double-count them */
+  let gD=b.gD,gF=b.gF,loss=b.loss,proceeds=b.proceedsCashedOut;
+  D.holdings.forEach(h=>{
+    const px=useLive?live(h):toAud(h.sell);
+    if(px==null)return;
+    const pr=afterFee(px*(h.amt||0)), cb=inv(h);
+    proceeds+=pr;
+    const g=pr-cb;
+    if(g>=0){ h.disc!==false?gD+=g:gF+=g } else loss+=-g;
+  });
+  const r=applyCGT(gD,gF,loss+(D.carry||0));
+  return Object.assign({gD,gF,loss,proceeds,pool:loss+(D.carry||0)},r);
+}
+
+/* ---------- prices ---------- */
+async function refresh(){
+  const ids=[...new Set([...D.holdings,...D.buys].map(x=>x.id).filter(Boolean))];
+  const btn=document.getElementById('refbtn');
+  if(!ids.length){setDot('idle','no price feeds linked');return}
+  btn.disabled=true;btn.textContent='…';
+  try{
+    const r=await fetch('https://api.coingecko.com/api/v3/simple/price?ids='+encodeURIComponent(ids.join(','))+'&vs_currencies=aud,usd&include_24hr_change=true');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    let got=0;
+    for(const id in j){
+      const d=j[id];if(d.aud==null)continue;
+      PX[id]={aud:d.aud,usd:d.usd,chg:d.aud_24h_change};
+      if(d.usd)FX=d.aud/d.usd;
+      got++;
+    }
+    if(got){stamp=Date.now();setDot('live',new Date().toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'}));recordHistory(totVal())}
+    else setDot('err','no feeds matched — check the IDs');
+  }catch(e){
+    setDot('err',stamp?'stale · last '+new Date(stamp).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'}):'offline — prices unavailable');
+  }
+  btn.disabled=false;btn.textContent='Refresh';
+  renderAll();
+  checkNotifications();
+  document.body.classList.remove('loading');
+}
+function setDot(s,txt){
+  document.getElementById('dot').className='pulse'+(s==='live'?' live':s==='err'?' err':'');
+  document.getElementById('stamp').textContent=txt;
+}
+
+/* ===== reactor orb =====
+   Small particle-sphere canvas: a shell of dots orbiting a glowing
+   core, two tilted ring traces, everything speeding up and brightening
+   once the status goes live. Pure canvas, no dependencies. */
+(function(){
+  const cnv=document.getElementById('dot');
+  if(!cnv||!cnv.getContext)return;
+  const SIZE=52, DPR=Math.min(window.devicePixelRatio||1,2);
+  cnv.width=SIZE*DPR;cnv.height=SIZE*DPR;
+  cnv.style.width=SIZE+'px';cnv.style.height=SIZE+'px';
+  const ctx=cnv.getContext('2d');
+  ctx.scale(DPR,DPR);
+  const cx=SIZE/2,cy=SIZE/2,R=SIZE*0.34;
+  const N=70,particles=[];
+  for(let i=0;i<N;i++){
+    particles.push({
+      theta:Math.random()*Math.PI*2,
+      phi:Math.acos(2*Math.random()-1),
+      rad:R*(0.55+Math.random()*0.5),
+      speed:0.15+Math.random()*0.35,
+      tw:Math.random()*Math.PI*2,
+      twSpeed:0.02+Math.random()*0.05
+    });
+  }
+  let t=0;
+  function frame(){
+    t++;
+    const state=cnv.classList.contains('err')?'err':cnv.classList.contains('live')?'live':'idle';
+    const active=state!=='idle';
+    const col=state==='err'?[255,120,120]:[110,215,255];
+    const [cr,cg,cb]=col;
+    ctx.clearRect(0,0,SIZE,SIZE);
+
+    const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,SIZE*0.5);
+    grad.addColorStop(0,`rgba(${cr},${cg},${cb},${active?.5:.12})`);
+    grad.addColorStop(1,`rgba(${cr},${cg},${cb},0)`);
+    ctx.fillStyle=grad;
+    ctx.beginPath();ctx.arc(cx,cy,SIZE*0.5,0,Math.PI*2);ctx.fill();
+
+    if(active){
+      ctx.save();ctx.translate(cx,cy);ctx.rotate(t*0.006);
+      ctx.strokeStyle=`rgba(${cr},${cg},${cb},.35)`;ctx.lineWidth=1;
+      ctx.beginPath();ctx.ellipse(0,0,R*1.15,R*0.4,0,0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+      ctx.save();ctx.translate(cx,cy);ctx.rotate(-t*0.004+1);
+      ctx.strokeStyle=`rgba(${cr},${cg},${cb},.22)`;
+      ctx.beginPath();ctx.ellipse(0,0,R*1.05,R*0.55,0,0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+    }
+
+    particles.forEach(p=>{
+      const ang=p.theta+t*0.01*p.speed*(active?1.6:0.3);
+      const x=cx+Math.sin(p.phi)*Math.cos(ang)*p.rad;
+      const y=cy+Math.cos(p.phi)*p.rad*0.9;
+      const depth=(Math.sin(p.phi)*Math.sin(ang)+1)/2;
+      const tw=(Math.sin(t*p.twSpeed+p.tw)+1)/2;
+      const alpha=active?0.2+0.7*depth*tw:0.14;
+      const size=active?0.6+1.5*depth:0.5;
+      ctx.beginPath();
+      ctx.fillStyle=`rgba(${cr},${cg},${cb},${alpha.toFixed(2)})`;
+      ctx.arc(x,y,size,0,Math.PI*2);ctx.fill();
+    });
+
+    ctx.beginPath();
+    ctx.fillStyle=active?'#eafcff':'#4b5768';
+    ctx.arc(cx,cy,active?4.5:3,0,Math.PI*2);ctx.fill();
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* brief bottom-of-screen confirmation, auto-dismisses itself — the CSS
+   animation and this timeout are kept in sync (see toastOut delay) */
+function toast(msg,kind){
+  const wrap=document.getElementById('toastwrap');
+  if(!wrap)return;
+  const el=document.createElement('div');
+  el.className='toast'+(kind?' '+kind:'');
+  el.textContent=msg;
+  wrap.appendChild(el);
+  setTimeout(()=>el.remove(),3000);
+}
+
+/* ---------- modals ---------- */
+let target=null,timer=null;
+function closeModal(){
+  document.getElementById('veil').classList.remove('on');
+  const w=document.getElementById('modalwrap');
+  w.classList.remove('dragging');w.style.transform='';
+}
+function openModal(html){
+  document.getElementById('modalbox').innerHTML=html;
+  document.getElementById('veil').classList.add('on');
+}
+/* mobile bottom sheet: drag the handle down to dismiss, like a native
+   iOS sheet — follows the finger with resistance-free 1:1 tracking while
+   dragging, then either snaps closed (past ~100px or a fast flick) or
+   springs back to open if released early */
+(function(){
+  const handle=document.getElementById('sheethandle');
+  const wrap=document.getElementById('modalwrap');
+  let sy=0,dy=0,dragging=false,st=0;
+  handle.addEventListener('touchstart',e=>{
+    if(window.innerWidth>640)return;
+    sy=e.touches[0].clientY;dy=0;dragging=true;st=Date.now();
+    wrap.classList.add('dragging');
+  },{passive:true});
+  handle.addEventListener('touchmove',e=>{
+    if(!dragging)return;
+    dy=Math.max(0,e.touches[0].clientY-sy);
+    wrap.style.transform=`translateY(${dy}px)`;
+  },{passive:true});
+  handle.addEventListener('touchend',()=>{
+    if(!dragging)return;
+    dragging=false;
+    wrap.classList.remove('dragging');
+    const fast=dy>20&&(Date.now()-st)<200;
+    if(dy>100||fast){wrap.style.transform='';closeModal()}
+    else wrap.style.transform='';
+  });
+})();
+/* in-app confirm — replaces window.confirm(), which some browsers silently
+   suppress (e.g. after "prevent this page from creating more dialogs")
+   with no visible failure, making a working button look broken */
+let confirmYes=null;
+function askConfirm(msg,onYes){
+  confirmYes=onYes;
+  openModal(`<h3>Confirm <button onclick="closeModal()">&times;</button></h3>
+    <div class="form">
+      <div class="fld" style="font:13px/1.5 var(--font-body);color:var(--ink)">${F.esc(msg)}</div>
+      <div style="display:flex;gap:8px">
+        <button class="act" style="flex:1" onclick="closeModal()">Cancel</button>
+        <button class="act solid" style="flex:1;background:linear-gradient(160deg,rgba(255,107,107,.95),rgba(220,80,80,.95));border-color:rgba(255,107,107,.6);color:#2A0808;box-shadow:0 4px 14px -4px rgba(255,107,107,.45)" onclick="runConfirm()">Remove</button>
+      </div>
+    </div>`);
+}
+function runConfirm(){const fn=confirmYes;closeModal();confirmYes=null;if(fn)fn()}
+function openSearch(kind,i){
+  target={kind,i};
+  const cur=(kind==='h'?D.holdings[i].c:D.buys[i].c)||'';
+  openModal(`<h3>Link a live price feed <button onclick="closeModal()">&times;</button></h3>
+    <div class="srch"><input id="q" placeholder="Search CoinGecko — e.g. Render" value="${F.esc(cur)}"></div>
+    <div class="results" id="results"><div class="empty" style="padding:26px">Type to search.</div></div>`);
+  const q=document.getElementById('q');
+  q.addEventListener('input',e=>doSearch(e.target.value));
+  q.focus();doSearch(cur);
+}
+function doSearch(v){
+  clearTimeout(timer);
+  const box=document.getElementById('results');
+  if(!box)return;
+  if(!v||v.length<2){box.innerHTML='<div class="empty" style="padding:26px">Type to search.</div>';return}
+  timer=setTimeout(async()=>{
+    box.innerHTML='<div class="empty" style="padding:26px">Searching…</div>';
+    try{
+      const r=await fetch('https://api.coingecko.com/api/v3/search?query='+encodeURIComponent(v));
+      const j=await r.json();
+      const list=(j.coins||[]).slice(0,25);
+      box.innerHTML=list.length?list.map(c=>`<div class="res" data-id="${F.esc(c.id)}" data-sym="${F.esc(c.symbol)}" data-img="${F.esc(c.thumb||'')}">
+        <img src="${F.esc(c.thumb||'')}" onerror="this.style.visibility='hidden'">
+        <div><div class="nm">${F.esc(c.name)}</div><div class="id">${F.esc(c.id)}</div></div>
+        <span class="rank">${c.market_cap_rank?'#'+c.market_cap_rank:''}</span>
+      </div>`).join('') : '<div class="empty" style="padding:26px">Nothing matched. Try the full project name.</div>';
+      box.querySelectorAll('.res').forEach(el=>el.onclick=()=>pick(el.dataset.id,el.dataset.sym,el.dataset.img));
+    }catch(e){box.innerHTML='<div class="empty" style="padding:26px">Search unavailable. Check your connection.</div>'}
+  },300);
+}
+function pick(id,sym,img){
+  if(!target)return;
+  const arr=target.kind==='h'?D.holdings:D.buys;
+  arr[target.i].id=id;
+  if(img)arr[target.i].img=img;
+  if(!arr[target.i].c)arr[target.i].c=(sym||'').toUpperCase();
+  save();closeModal();refresh();
+}
+/* one-off backfill: pull logos for any linked coin that doesn't have
+   one yet (covers positions added before this feature, or edited by hand) */
+async function backfillLogos(){
+  const missing=[...new Set([...D.holdings,...D.buys].filter(x=>x.id&&!x.img).map(x=>x.id))];
+  if(!missing.length)return;
+  try{
+    const r=await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=aud&ids='+encodeURIComponent(missing.join(',')));
+    if(!r.ok)return;
+    const j=await r.json();
+    let changed=false;
+    j.forEach(c=>{
+      if(!c.image)return;
+      D.holdings.forEach(h=>{if(h.id===c.id&&!h.img){h.img=c.image;changed=true}});
+      D.buys.forEach(b=>{if(b.id===c.id&&!b.img){b.img=c.image;changed=true}});
+    });
+    if(changed){save();renderAll()}
+  }catch(e){}
+}
+/* market cap rank per linked coin, shown to the left of the name on
+   Home's Live positions table — not persisted, just a live lookup */
+let RANKS={};
+async function loadRanks(){
+  const ids=[...new Set([...D.holdings,...D.buys].map(x=>x.id).filter(Boolean))];
+  if(!ids.length)return;
+  try{
+    const r=await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids='+encodeURIComponent(ids.join(',')));
+    if(!r.ok)return;
+    const j=await r.json();
+    j.forEach(c=>{RANKS[c.id]=c.market_cap_rank});
+    renderHome();
+  }catch(e){}
+}
+/* sell modal */
+let sellIdx=null;
+function openSell(i){
+  sellIdx=i;
+  const h=D.holdings[i];
+  const px=live(h);
+  const sug=px!=null?px:'';
+  openModal(`<h3>Log a sell — ${F.esc(h.c)||'position'} <button onclick="closeModal()">&times;</button></h3>
+    <div class="form">
+      <div class="fld"><label>Quantity sold</label>
+        <input id="sq" type="number" step="any" placeholder="0" oninput="sellPreview()">
+        <div class="note">You hold ${F.q(h.amt)}. <a href="#" onclick="document.getElementById('sq').value=${h.amt||0};sellPreview();return false" style="color:var(--plan)">Sell all</a></div>
+      </div>
+      <div class="fld"><label>Sell price (AUD)</label>
+        <input id="sp" type="number" step="any" value="${sug}" oninput="sellPreview()">
+        <div class="note">${px!=null?'Live price prefilled.':'No live price available.'}</div>
+      </div>
+      <div class="fld"><label>Date sold</label>
+        <input id="sd" type="date" value="${new Date().toISOString().slice(0,10)}">
+      </div>
+      <div class="fld"><label>Held 12 months or more</label>
+        <select id="sdisc"><option value="1">Yes — 50% discount applies</option><option value="0">No — full gain taxed</option></select>
+      </div>
+      <div class="fld"><label>Was this money reinvested?</label>
+        <select id="sreinv"><option value="1">Yes — went back into the portfolio</option><option value="0">No — kept as cash / withdrawn</option></select>
+        <div class="note">Only matters if this sells at a loss — a reinvested loss still counts toward "Total invested"; cashed-out money doesn't.</div>
+      </div>
+      <div class="previewbox" id="spv">Enter a quantity to preview.</div>
+      <button class="act solid" style="width:100%;padding:10px" onclick="confirmSell()">Record sell</button>
+    </div>`);
+  setTimeout(()=>document.getElementById('sq').focus(),50);
+}
+function sellPreview(){
+  const h=D.holdings[sellIdx];
+  const q=F.n(document.getElementById('sq').value)||0;
+  const p=F.n(document.getElementById('sp').value)||0;
+  const gross=toAud(q*p)||0, fee=gross*SELL_FEE, pr=gross-fee;
+  const cb=toAud(q*(h.buy||0))||0, g=pr-cb;
+  document.getElementById('spv').innerHTML=
+    `Gross proceeds <span>${F.m(gross)}</span><br>Exchange fee (0.6%) <span>-${F.m(fee)}</span><br>
+     Net proceeds <span>${F.m(pr)}</span><br>Cost base <span>${F.m(cb)}</span><br>
+     <span style="float:none">${g>=0?'Capital gain':'Capital loss'}</span> <span class="${g>=0?'pos':'neg'}">${F.m(Math.abs(g))}</span><br>
+     Remaining ${F.esc(h.c)} <span>${F.q((h.amt||0)-q)}</span>`;
+}
+function confirmSell(){
+  const h=D.holdings[sellIdx];
+  const q=F.n(document.getElementById('sq').value);
+  const p=F.n(document.getElementById('sp').value);
+  if(!q||q<=0){alert('Enter a quantity greater than zero.');return}
+  if(q>(h.amt||0)+1e-9){alert("You can't sell more than you hold. You have "+F.q(h.amt)+".");return}
+  if(p==null){alert('Enter a sell price.');return}
+  D.trades.unshift({
+    d:document.getElementById('sd').value,
+    c:h.c, qty:q, buy:h.buy, sell:p,
+    disc:document.getElementById('sdisc').value==='1',
+    reinvested:document.getElementById('sreinv').value==='1'
+  });
+  h.amt=(h.amt||0)-q;
+  if(h.amt<1e-9)h.amt=0;
+  save();closeModal();renderAll();
+}
+
+/* ---------- math ---------- */
+const SELL_FEE=0.006; // exchange fee taken off every sell, before tax
+const afterFee=v=>v==null?v:v*(1-SELL_FEE);
+const inv=h=>toAud((h.amt||0)*(h.buy||0))||0;
+const rev=h=>afterFee(toAud((h.amt||0)*(h.sell||0)))||0;
+const totInv=()=>D.holdings.reduce((s,h)=>s+inv(h),0);
+const totRev=()=>D.holdings.reduce((s,h)=>s+rev(h),0);
+const posVal=h=>{const p=live(h);return p==null?null:p*(h.amt||0)};
+const totVal=()=>D.holdings.reduce((s,h)=>s+(posVal(h)||0),0);
+
+/* ---------- portfolio value history (for the Home chart) ----------
+   one point per refresh, but points within 10 min of each other collapse
+   into the latest value so frequent refreshing doesn't bloat storage;
+   capped to the most recent 2000 points (~a couple of years at a
+   5-min refresh cadence, far longer at normal usage) */
+function recordHistory(v){
+  if(v==null||!isFinite(v))return;
+  D.history=D.history||[];
+  const now=Date.now(),last=D.history[D.history.length-1];
+  if(last&&now-last.t<10*60*1000){last.v=v;last.t=now}
+  else D.history.push({t:now,v});
+  if(D.history.length>2000)D.history=D.history.slice(-2000);
+  save();
+}
+function renderHistoryChart(){
+  const svg=document.getElementById('histsvg'),empty=document.getElementById('histempty'),
+        line=document.getElementById('histline'),fill=document.getElementById('histfill');
+  if(!svg)return;
+  const pts=D.history||[];
+  if(pts.length<2){
+    svg.style.display='none';empty.style.display='';
+    return;
+  }
+  svg.style.display='';empty.style.display='none';
+  const W=600,H=60,PADX=3,PADY=5;
+  const vals=pts.map(p=>p.v);
+  let min=Math.min(...vals),max=Math.max(...vals);
+  if(min===max){min-=Math.abs(min)*.02||1;max+=Math.abs(max)*.02||1}
+  const x=i=>PADX+i*(W-PADX*2)/(pts.length-1);
+  const y=v=>H-PADY-(v-min)/(max-min)*(H-PADY*2);
+  const d=pts.map((p,i)=>(i?'L':'M')+x(i).toFixed(1)+','+y(p.v).toFixed(1)).join(' ');
+  line.setAttribute('d',d);
+  fill.setAttribute('d',d+` L${x(pts.length-1).toFixed(1)},${H} L${x(0).toFixed(1)},${H} Z`);
+}
+
+/* ===== per-coin price chart =====
+   CoinGecko's market_chart endpoint is CORS-open like the price feeds, so
+   this draws straight from it with the same inline-SVG approach as the Home
+   sparkline — no library. Two hosts share this code: the desktop table
+   expands a chart inline under the clicked row, and mobile (where a row is
+   far too narrow to read one) opens it in the bottom sheet. Each host gets
+   its own id prefix so both can exist at once without colliding. */
+const CHART_CACHE={}, CHART_TTL=300000;
+const CHART_RANGES=[['1','1D'],['7','7D'],['30','1M'],['90','3M'],['365','1Y']];
+const CHART_CTX={};            // prefix -> {id,sym,cb}
+let LIVE_ROWS=[], chartReq=0;
+let openChartCoin=null, openChartDays='7';   // desktop inline row, kept across re-renders
+
+function chartShell(pfx){
+  return `<div class="chartwrap" id="${pfx}-wrap">
+      <div class="chartmeta"><span class="chartprice" id="${pfx}-price"></span><span class="chartchg" id="${pfx}-chg"></span></div>
+      <div id="${pfx}-body"><div class="chartmsg">Loading…</div></div>
+      <div class="chartaxis"><span id="${pfx}-from"></span><span id="${pfx}-to"></span></div>
+      <div class="chartranges" id="${pfx}-ranges">${CHART_RANGES.map(([k,t])=>`<button data-d="${k}" onclick="event.stopPropagation();drawChart('${pfx}','${k}')">${t}</button>`).join('')}</div>
+    </div>`;
+}
+
+/* mobile: open the chart in the bottom sheet */
+function openChartRow(i){
+  const h=LIVE_ROWS[i];
+  if(!h)return;
+  if(!h.id){alert('No price feed linked to '+(h.c||'this position')+'. Open the Tracker tab and use the price feed button on that row.');return}
+  CHART_CTX.sheet={id:h.id,sym:h.c||'—',cb:toAud(h.buy)};
+  openModal(`<h3>${F.esc(h.c)||'Price'} · price <button onclick="closeModal()">&times;</button></h3>${chartShell('sheet')}`);
+  drawChart('sheet','7');
+}
+
+/* desktop: expand the chart inline, in the table, under the clicked row */
+function toggleChartRow(i){
+  const h=LIVE_ROWS[i];
+  if(!h)return;
+  if(!h.id){alert('No price feed linked to '+(h.c||'this position')+'. Open the Tracker tab and use the price feed button on that row.');return}
+  const same=openChartCoin===h.id;
+  openChartCoin=same?null:h.id;
+  if(!same)openChartDays='7';
+  renderHome();
+}
+
+/* paints the inline row's chart after a table render. Uses whatever is cached
+   even if stale, because renderHome() runs on every 90s price refresh and a
+   loading flash (or refetch) every time would be worse than a slightly old
+   line — a user-driven range click still honours the TTL and refetches. */
+function restoreInlineChart(){
+  if(!openChartCoin)return;
+  const wrapEl=document.getElementById('live-tablewrap');
+  // the desktop table is hidden at mobile widths — don't redraw into it
+  if(!wrapEl||!wrapEl.clientWidth)return;
+  const host=document.getElementById('inlinechart-'+openChartCoin);
+  if(!host)return;
+  const h=LIVE_ROWS.find(x=>x.id===openChartCoin);
+  if(!h)return;
+  CHART_CTX.inline={id:h.id,sym:h.c||'—',cb:toAud(h.buy)};
+  host.innerHTML=chartShell('inline');
+  sizeInlineChart();
+  drawChart('inline',openChartDays,{anyCache:true});
+}
+/* match the chart to the table's visible width rather than its full scroll
+   width, so it stays on screen when the table is scrolling sideways */
+function sizeInlineChart(){
+  const host=openChartCoin&&document.getElementById('inlinechart-'+openChartCoin);
+  const wrap=document.getElementById('live-tablewrap');
+  if(host&&wrap)host.style.width=wrap.clientWidth+'px';
+}
+window.addEventListener('resize',sizeInlineChart);
+
+async function drawChart(pfx,days,opts){
+  const ctx=CHART_CTX[pfx];
+  if(!ctx)return;
+  const {id,cb}=ctx, my=++chartReq;
+  if(pfx==='inline')openChartDays=days;
+  document.querySelectorAll('#'+pfx+'-ranges button').forEach(b=>b.classList.toggle('on',b.dataset.d===days));
+  const body=document.getElementById(pfx+'-body');
+  if(!body)return;
+  const key=id+':'+days, hit=CHART_CACHE[key];
+  let pts;
+  if(hit&&((opts&&opts.anyCache)||Date.now()-hit.t<CHART_TTL))pts=hit.pts;
+  else{
+    /* blank the header and axis while loading — they describe the range being
+       drawn, and leaving the previous range's numbers up makes a failed or
+       slow load look like it succeeded with those values */
+    body.innerHTML='<div class="chartmsg">Loading…</div>';
+    [pfx+'-price',pfx+'-chg',pfx+'-from',pfx+'-to'].forEach(i=>{const e=document.getElementById(i);if(e)e.textContent=''});
+    try{
+      const r=await fetch(`https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=aud&days=${days}`);
+      if(my!==chartReq)return;
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const j=await r.json();
+      pts=(j.prices||[]).filter(p=>p&&isFinite(p[1]));
+      if(pts.length<2)throw new Error('no data');
+      CHART_CACHE[key]={t:Date.now(),pts};
+    }catch(e){
+      /* CoinGecko drops the CORS header on throttled responses, so a rate
+         limit surfaces here as a network failure rather than a readable 429 —
+         which makes throttling much the likeliest cause of landing here. */
+      const b2=document.getElementById(pfx+'-body');
+      if(my===chartReq&&b2)b2.innerHTML=`<div class="chartmsg"><div>Couldn't load this chart — the free price feed is usually rate-limiting when this happens.<br><br>
+        <button class="chartbtn" style="max-width:160px;margin:0 auto" onclick="event.stopPropagation();drawChart('${pfx}','${days}')">Try again</button></div></div>`;
+      return;
+    }
+  }
+  if(my!==chartReq)return;
+  const bodyNow=document.getElementById(pfx+'-body');
+  if(!bodyNow)return;
+
+  const W=600,H=170,PAD=8;
+  const vals=pts.map(p=>p[1]);
+  let min=Math.min(...vals),max=Math.max(...vals);
+  if(min===max){min*=.999;max*=1.001}
+  const x=i=>i*W/(pts.length-1);
+  const y=v=>H-PAD-(v-min)/(max-min)*(H-PAD*2);
+  const d=pts.map((p,i)=>(i?'L':'M')+x(i).toFixed(1)+','+y(p[1]).toFixed(1)).join(' ');
+  const first=vals[0],last=vals[vals.length-1],chg=(last-first)/first*100;
+  const up=chg>=0;
+  /* your average buy price, but only when it actually falls inside the
+     plotted range — otherwise it would flatten the line against an edge */
+  const ref=(cb&&cb>min&&cb<max)
+    ? `<line class="chartref" x1="0" y1="${y(cb).toFixed(1)}" x2="${W}" y2="${y(cb).toFixed(1)}"/>
+       <text class="chartreflabel" x="4" y="${(y(cb)-4).toFixed(1)}">your avg buy ${F.price(cb)}</text>` : '';
+  const gid=pfx+'-grad';
+
+  document.getElementById(pfx+'-wrap').classList.toggle('neg',!up);
+  document.getElementById(pfx+'-price').textContent=F.price(last);
+  document.getElementById(pfx+'-chg').textContent=(up?'▲ +':'▼ ')+chg.toFixed(2)+'%';
+  const fmt=t=>days==='1'
+    ? new Date(t).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'})
+    : new Date(t).toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+  document.getElementById(pfx+'-from').textContent=fmt(pts[0][0]);
+  document.getElementById(pfx+'-to').textContent=fmt(pts[pts.length-1][0]);
+  bodyNow.innerHTML=`<svg viewBox="0 0 ${W} ${H}" class="chartsvg" preserveAspectRatio="none">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="currentColor" stop-opacity=".28"/>
+      <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+    </linearGradient></defs>
+    <path class="chartfill" fill="url(#${gid})" d="${d} L${W},${H} L0,${H} Z"/>
+    ${ref}
+    <path class="chartline" d="${d}"/>
+  </svg>`;
+}
+
+const goalTot=()=>D.goals.reduce((s,g)=>s+(g.v||0),0);
+/* goals are entered as after-tax amounts — gross up by solving for the
+   proceeds P where P − CGT(P − cost base) = the goal, keeping the
+   discountable / non-discountable mix and the loss pool as projected.
+   Scaling by a "tax as % of proceeds" ratio doesn't work: that ratio is
+   measured at your *target* exit, not at the goal-sized exit, and it
+   carries no cost base at all — so adding a buy pushed this figure up
+   when more cost base should pull it down. */
+function goalTotPreTax(cgt){
+  const at=goalTot();
+  if(!at)return 0;
+  const p=cgt||projectedCGT(false);
+  /* cost base behind those proceeds: gains are proceeds − cost for the
+     winners and losses are cost − proceeds for the losers */
+  const cost=p.proceeds-(p.gD+p.gF)+p.loss;
+  const gTot=p.gD+p.gF, share=gTot>0?p.gD/gTot:1;
+  const pool=p.loss+(D.carry||0);
+  const netAt=P=>{
+    const g=P-cost+p.loss;
+    if(!(g>0))return P;
+    return P-applyCGT(g*share,g*(1-share),pool).tax;
+  };
+  if(netAt(at)>=at)return at;
+  let lo=at,hi=at*20;
+  for(let i=0;i<80;i++){const m=(lo+hi)/2; netAt(m)<at?lo=m:hi=m}
+  return (lo+hi)/2;
+}
+
+/* highest sell level a holding's live price has crossed, or the
+   nearest one still ahead — index matches the order shown in Exit Plan */
+function levelStatus(h,p){
+  const L=h.levels||[];
+  if(!L.length||p==null)return null;
+  let hit=null,next=null;
+  L.forEach((l,j)=>{
+    const lp=toAud(l.p);
+    if(lp==null)return;
+    if(p>=lp){ if(!hit||lp>hit.lp) hit={j,lp,pct:l.pct} }
+    else { if(!next||lp<next.lp) next={j,lp} }
+  });
+  if(hit)return{hit:true,idx:hit.j,label:'L'+(hit.j+1)+' hit — sell '+(hit.pct||0)+'%'};
+  if(next){const away=(next.lp-p)/p;return{hit:false,idx:next.j,label:'+'+(away*100).toFixed(0)+'% to L'+(next.j+1)}}
+  return null;
+}
+
+/* ---------- NOTIFICATIONS =====
+   One ping per crossing: a sell-level index only fires once it's
+   higher than the last one notified for that coin, and a buy target
+   re-arms itself once price moves back out of range. ---------- */
+function updateNotifyUI(){
+  const b=document.getElementById('notifybtn');
+  if(!b)return;
+  if(!('Notification' in window)){b.textContent='Not supported';b.disabled=true;b.className='chip unset';return}
+  if(Notification.permission==='denied'){b.textContent='Blocked in browser settings';b.className='chip unset';return}
+  b.disabled=false;
+  b.className='chip'+(D.notifyEnabled?' on':'');
+  b.textContent=D.notifyEnabled?'On — tap to turn off':'Enable';
+}
+function toggleNotify(){
+  if(!('Notification' in window)){alert('Your browser does not support notifications.');return}
+  if(Notification.permission==='denied'){alert("Notifications are blocked for this page. Allow them in your browser's site settings, then reload.");return}
+  if(D.notifyEnabled){D.notifyEnabled=false;save();updateNotifyUI();return}
+  if(Notification.permission==='granted'){
+    D.notifyEnabled=true;save();updateNotifyUI();checkNotifications();return;
+  }
+  Notification.requestPermission().then(p=>{
+    D.notifyEnabled=(p==='granted');save();updateNotifyUI();
+    if(D.notifyEnabled)checkNotifications();
+  });
+}
+function ping(title,body,tag){
+  try{new Notification(title,{body,tag})}catch(e){}
+}
+function checkNotifications(){
+  if(!D.notifyEnabled||!('Notification' in window)||Notification.permission!=='granted')return;
+  let changed=false;
+  D.holdings.forEach(h=>{
+    if(!((h.amt||0)>0))return;
+    const key=h.id||h.c;if(!key)return;
+    const st=levelStatus(h,live(h));
+    const prev=D.notified.sell[key]??-1;
+    if(st&&st.hit&&st.idx>prev){
+      ping((h.c||'Position')+' — '+st.label,'Live price '+F.price(live(h))+' AUD','sell:'+key);
+      D.notified.sell[key]=st.idx;changed=true;
+    }
+  });
+  D.buys.forEach(b=>{
+    const key=b.id||b.c;if(!key)return;
+    const tb2=toAud(b.buy),p=b.id&&PX[b.id]?PX[b.id].aud:null;
+    const inRange=p!=null&&tb2!=null&&p<=tb2;
+    const was=!!D.notified.buy[key];
+    if(inRange&&!was){
+      ping((b.c||'Planned buy')+' — target buy reached','Live price '+F.price(p)+' AUD, target '+F.price(tb2),'buy:'+key);
+      D.notified.buy[key]=true;changed=true;
+    }else if(!inRange&&was){D.notified.buy[key]=false;changed=true}
+  });
+  if(changed)save();
+}
+
+/* ---------- HOME ---------- */
+function renderHome(){
+  renderHistoryChart();
+  const TV=totVal(),TI=totInv(),RB=realisedBuckets();
+  const unlinked=D.holdings.filter(h=>(!h.id||!PX[h.id])&&(h.amt||0)>0);
+  document.getElementById('linkwarn').innerHTML=unlinked.length
+    ? `<div class="alert info" style="margin:0 0 16px">${unlinked.length} position${unlinked.length>1?'s are':' is'} unpriced: <b>${unlinked.map(h=>F.esc(h.c)||'unnamed').join(', ')}</b>. Open Tracker and use the price feed button on that row.</div>` : '';
+
+  let val=0,prev=0;
+  D.holdings.forEach(h=>{
+    const v=posVal(h);if(v==null)return;
+    val+=v;const c=PX[h.id].chg;
+    prev+=(c==null)?v:v/(1+c/100);
+  });
+  const chg=prev?(val-prev)/prev:null;
+
+  animateValue(document.getElementById('hv'),TV||null,v=>v==null?'—':F.m(v));
+  const e24=document.getElementById('h24');
+  e24.textContent=chg==null?'—':(chg>=0?'+':'')+F.p(chg)+' ('+(val-prev>=0?'+':'')+F.m(val-prev)+')';
+  e24.className=chg>=0?'pos':'neg';
+  const pl=TV-TI, epl=document.getElementById('hpl');
+  epl.textContent=TV?(pl>=0?'+':'')+F.m(pl):'—';
+  epl.className=pl>=0?'pos':'neg';
+  const erl=document.getElementById('hrl');
+  erl.textContent=D.trades.length?(RB.gain>=0?'+':'')+F.m(RB.gain):'—';
+  erl.className=RB.gain>=0?'pos':'neg';
+  const totalInvested=TI+RB.reinvestedLoss;
+  document.getElementById('hcb').textContent=F.m(totalInvested);
+  const delta=totalInvested?(TV-totalInvested)/totalInvested:null;
+  const hmxEl=document.getElementById('hmx');
+  hmxEl.textContent=delta==null?'—':(delta>=0?'+':'')+F.p(delta);
+  hmxEl.className=delta==null?'':(delta>=0?'pos':'neg');
+  document.getElementById('hmxlabel').textContent=delta==null?'of invested':(delta>=0?'above invested':'below invested');
+  document.getElementById('fxtag').textContent='AUD';
+
+  const rows=D.holdings.slice().sort((a,b)=>(posVal(b)||0)-(posVal(a)||0));
+  LIVE_ROWS=rows;   // charts look positions up by index (rows is sorted, D.holdings isn't)
+  document.querySelector('#live tbody').innerHTML=rows.map((h,ri)=>{
+    const p=live(h),v=posVal(h),I=inv(h);
+    const c=h.id&&PX[h.id]?PX[h.id].chg:null;
+    const g=v==null?null:v-I;
+    const lvlSt=levelStatus(h,p);
+    let lvlTxt,lvlCls;
+    if(lvlSt){lvlTxt=lvlSt.label;lvlCls=lvlSt.hit?'pos':'dim'}
+    else{
+      const tgt=toAud(h.sell);
+      const away=p&&tgt?(tgt-p)/p:null;
+      lvlTxt=away==null?'—':(away<=0?'target hit':'+'+(away*100).toFixed(0)+'%');
+      lvlCls=away<=0?'pos':'dim';
+    }
+    const arrow=c==null?'':`<span class="trend">${c>=0?'▲':'▼'}</span>`;
+    const rank=h.id?RANKS[h.id]:null;
+    const isOpen=h.id&&openChartCoin===h.id;
+    return `<tr class="clickrow ${isOpen?'chartopen':''} ${suppressAnim?'':'rowin'}" style="animation-delay:${suppressAnim?0:Math.min(ri*30,300)}ms" onclick="toggleChartRow(${ri})" title="${isOpen?'Hide':'Show'} price chart">
+      <td class="l" data-label="Coin"><span class="sym"><i class="chev"></i>${rank?`<span class="rankbadge">#${rank}</span>`:''}${F.logo(h.img)}${F.esc(h.c)||'—'}</span></td>
+      <td class="calc" data-label="Price (AUD)">${F.price(p)}</td>
+      <td class="calc ${c>=0?'pos':'neg'}" data-label="24h">${c==null?'—':arrow+(c>=0?'+':'')+c.toFixed(1)+'%'}</td>
+      <td class="calc dim" data-label="Holdings">${F.q(h.amt)}</td>
+      <td class="calc" style="font-weight:600" data-label="Position value">${F.m(v)}</td>
+      <td class="calc dim" data-label="% of portfolio">${TV&&v!=null?F.p(v/TV):'—'}</td>
+      <td class="calc dim" data-label="Cost basis">${F.m(I)}</td>
+      <td class="calc ${g>=0?'pos':'neg'}" data-label="Unrealised P/L">${g==null?'—':(g>=0?'+':'')+F.m(g)}</td>
+      <td class="calc ${lvlCls}" style="${lvlSt&&lvlSt.hit?'font-weight:600':''}" data-label="Sell levels">${lvlTxt}</td>
+    </tr>
+    <tr class="chartrow ${isOpen?'open':''}"><td colspan="9"><div class="chartexpand"><div>
+      <div class="chartexpandpad" id="inlinechart-${F.esc(h.id||'x'+ri)}"></div>
+    </div></div></td></tr>`}).join('')||`<tr><td colspan="9"><div class="empty"><b>No open positions</b>Add holdings in the Tracker tab.</div></td></tr>`;
+  restoreInlineChart();
+
+  /* mobile widget cards — same rows/values as the table above, just laid
+     out as a compact name+value / P&L+% / price row with a tap-to-expand
+     detail panel for the rest (24h, % of portfolio, cost basis, levels) */
+  document.getElementById('live-poslist').innerHTML=rows.map((h,ri)=>{
+    const p=live(h),v=posVal(h),I=inv(h);
+    const c=h.id&&PX[h.id]?PX[h.id].chg:null;
+    const g=v==null?null:v-I;
+    const pct=(I&&g!=null)?Math.abs(g)/I*100:null;
+    const sign=g==null?'':(g>=0?'pos':'neg');
+    const lvlSt=levelStatus(h,p);
+    let lvlTxt;
+    if(lvlSt)lvlTxt=lvlSt.label;
+    else{
+      const tgt=toAud(h.sell);
+      const away=p&&tgt?(tgt-p)/p:null;
+      lvlTxt=away==null?'—':(away<=0?'target hit':'+'+(away*100).toFixed(0)+'%');
+    }
+    const arrow=c==null?'':(c>=0?'▲':'▼');
+    const rank=h.id?RANKS[h.id]:null;
+    return `<div class="poscard">
+      <div class="pc-row" onclick="this.nextElementSibling.classList.toggle('open')">
+        <div class="pc-id">
+          ${h.img?`<img class="pc-logo" src="${F.esc(h.img)}" onerror="this.style.visibility='hidden'">`:'<div class="pc-logo"></div>'}
+          <div style="min-width:0">
+            <div class="pc-name">${F.esc(h.c)||'—'}</div>
+            <div class="pc-sub">${F.m(v)}</div>
+          </div>
+        </div>
+        <div class="pc-mid ${sign}">
+          <div class="pc-pl">${g==null?'—':F.m(Math.abs(g))}</div>
+          ${pct!=null?`<div class="pc-pct">${g>=0?'▲':'▼'}${pct.toFixed(2)}%</div>`:''}
+        </div>
+        <div class="pc-price">
+          <div class="pc-pricenum">${F.price(p)}</div>
+          ${c!=null?`<div class="pc-chg ${c>=0?'pos':'neg'}">${arrow}${c>=0?'+':''}${c.toFixed(1)}%</div>`:''}
+        </div>
+      </div>
+      <div class="secbody"><div class="secinner"><div class="pc-detailinner">
+        <div class="pc-detailrow"><span>Holdings</span><b>${F.q(h.amt)}</b></div>
+        <div class="pc-detailrow"><span>% of portfolio</span><b>${TV&&v!=null?F.p(v/TV):'—'}</b></div>
+        <div class="pc-detailrow"><span>Cost basis</span><b>${F.m(I)}</b></div>
+        <div class="pc-detailrow"><span>Sell levels</span><b>${lvlTxt}</b></div>
+        ${rank?`<div class="pc-detailrow"><span>Rank</span><b>#${rank}</b></div>`:''}
+        <button class="chartbtn" onclick="openChartRow(${ri})">View price chart</button>
+      </div></div></div>
+    </div>`}).join('')||`<div class="empty"><b>No open positions</b>Add holdings in the Tracker tab.</div>`;
+
+  animateValue(document.getElementById('lv-val'),TV,v=>F.m(v));
+  document.getElementById('lv-cb').textContent=F.m(TI);
+  const lp=document.getElementById('lv-pl');
+  lp.textContent=TV?(TV-TI>=0?'+':'')+F.m(TV-TI):'—';
+  lp.className=TV-TI>=0?'pos':'neg';
+  renderHomeGauge();
+}
+
+/* arc "goal progress at today's live prices" gauge shown next to
+   Portfolio value on Home — kept in sync with the Goals tab. */
+let gaugeArcLen=null;
+function renderHomeGauge(){
+  const arc=document.getElementById('gaugearc');
+  if(!arc)return;
+  if(gaugeArcLen==null)gaugeArcLen=arc.getTotalLength();
+  const GTpre=goalTotPreTax();
+  const val=projectedCGT(true).proceeds;
+  const pct=GTpre?val/GTpre:0;
+  const p=Math.min(Math.max(pct,0),1);
+
+  arc.style.strokeDasharray=gaugeArcLen;
+  arc.style.strokeDashoffset=gaugeArcLen*(1-p);
+  arc.classList.toggle('over',pct>=1);
+
+  animateValue(document.getElementById('gaugepct'),GTpre?pct:null,v=>v==null?'—':F.p(v));
+  document.getElementById('gaugesub').innerHTML=GTpre
+    ?`<b>${F.m(val)}</b> of ${F.m(GTpre)} goal`
+    :'Add a goal amount in the Goals tab.';
+}
+
+/* ---------- TRACKER ---------- */
+function renderHoldings(){
+  const TI=totInv(),TR=totRev();
+  document.querySelector('#holdings tbody').innerHTML=D.holdings.map((h,i)=>{
+    const I=inv(h),R=rev(h),G=R-I,M=I?R/I:null;
+    return `<tr class="${suppressAnim?'':'rowin'}" style="animation-delay:${suppressAnim?0:Math.min(i*30,300)}ms">
+      <td class="l" data-label="Narrative"><input class="narr" data-fkey="h${i}-n" value="${F.esc(h.n)}" placeholder="narrative" oninput="up(${i},'n',this.value,1)"></td>
+      <td class="l" data-label="Coin"><div style="display:flex;align-items:center;gap:6px">${F.logo(h.img)}<input data-fkey="h${i}-c" value="${F.esc(h.c)}" placeholder="COIN" style="font-weight:600" oninput="up(${i},'c',this.value,1)"></div></td>
+      <td class="l" data-label="Price feed"><button class="chip ${h.id?'':'unset'}" onclick="openSearch('h',${i})">${F.esc(h.id)||'link feed'}</button></td>
+      <td data-label="Amount"><input type="text" inputmode="decimal" data-fkey="h${i}-amt" value="${h.amt??''}" placeholder="0" oninput="up(${i},'amt',this.value)"></td>
+      <td data-label="Avg buy"><input type="text" inputmode="decimal" data-fkey="h${i}-buy" value="${h.buy??''}" placeholder="0" oninput="up(${i},'buy',this.value)"></td>
+      <td class="calc dim" data-label="Invested">${F.m(I)}</td>
+      <td data-label="Avg sell"><input type="text" inputmode="decimal" data-fkey="h${i}-sell" value="${h.sell??''}" placeholder="0" oninput="up(${i},'sell',this.value)"></td>
+      <td class="calc" data-label="Multiple">${F.x(M)}</td>
+      <td class="calc" data-label="Revenue">${F.m(R)}</td>
+      <td class="calc ${G>=0?'pos':'neg'}" data-label="Gain">${F.m(G)}</td>
+      <td class="l" data-label="CGT"><button class="chip ${h.disc!==false?'on':''}" onclick="toggleDisc(${i})">${h.disc!==false?'12m+':'&lt;12m'}</button></td>
+      <td class="l"><button class="sellbtn" onclick="openSell(${i})">Sell</button></td>
+      <td><button class="del" onclick="delHolding(${i})">&times;</button></td>
+    </tr>`}).join('')||`<tr><td colspan="13"><div class="empty"><b>No open positions</b>Add your first holding to start tracking.</div></td></tr>`;
+
+  document.getElementById('t-inv').textContent=F.m(TI);
+  document.getElementById('t-rev').textContent=F.m(TR);
+  const tp=document.getElementById('t-prof');
+  tp.textContent=F.m(TR-TI);tp.className=(TR-TI)>=0?'pos':'neg';
+  document.getElementById('t-mult').textContent=F.x(TI?TR/TI:null);
+  document.getElementById('h-count').textContent=D.holdings.length+' position'+(D.holdings.length===1?'':'s');
+}
+function toggleDisc(i){D.holdings[i].disc=D.holdings[i].disc===false;save();renderAll()}
+function renderStats(){
+  const TI=totInv(),TR=totRev(),G=TR-TI;
+  const proj=projectedCGT(false), real=realisedCGT();
+  const openTax=Math.max(proj.tax-real.tax,0);
+  const RB=realisedBuckets();
+  const totalInvested=TI+RB.reinvestedLoss;
+  document.getElementById('s-cost').textContent=F.m(TI);
+  document.getElementById('s-total-inv').textContent=F.m(totalInvested);
+  document.getElementById('s-total-invsub').textContent=RB.reinvestedLoss
+    ? F.m(TI)+' open + '+F.m(RB.reinvestedLoss)+' lost on reinvested sells'
+    : 'cost basis + reinvested losses';
+  document.getElementById('s-rev').textContent=F.m(TR);
+  const sp=document.getElementById('s-prof');
+  sp.textContent=F.m(G);sp.className='v mono '+(G>=0?'pos':'neg');
+  document.getElementById('s-tax').textContent=F.m(TR-openTax);
+  document.getElementById('s-taxsub').textContent=F.m(openTax)+' CGT on exit';
+  document.getElementById('s-mult').textContent=F.x(totalInvested?TR/totalInvested:null);
+}
+function up(i,k,v,txt){
+  D.holdings[i][k]=txt?v:F.n(v);save();
+  if(txt){renderStats();return}
+  withFocusPreserved(renderAll);
+}
+function delHolding(i){askConfirm('Remove '+(D.holdings[i].c||'this position')+'? Logged sells are kept.',()=>{D.holdings.splice(i,1);save();renderAll()})}
+/* add-position modal — merges into an existing coin (matched by symbol) instead
+   of always creating a new row, so topping up a position is a quick fill-in */
+function openAddHolding(){
+  openModal(`<h3>Add position <button onclick="closeModal()">&times;</button></h3>
+    <div class="form">
+      <div class="fld"><label>Coin</label>
+        <input id="ah-c" placeholder="e.g. SUI" style="text-transform:uppercase" oninput="ahMatch()">
+        <div class="note" id="ah-match">&nbsp;</div>
+      </div>
+      <div class="fld"><label>Narrative (optional)</label><input id="ah-n" placeholder="e.g. Layer 1"></div>
+      <div class="fld"><label>Amount bought</label><input id="ah-amt" type="number" step="any" placeholder="0"></div>
+      <div class="fld"><label>Buy price (AUD)</label><input id="ah-buy" type="number" step="any" placeholder="0"></div>
+      <div class="fld"><label>Sell target (AUD)</label><input id="ah-sell" type="number" step="any" placeholder="optional"></div>
+      <button class="act solid" style="width:100%;padding:10px" onclick="confirmAddHolding()">Add</button>
+    </div>`);
+  setTimeout(()=>document.getElementById('ah-c').focus(),50);
+}
+function ahMatch(){
+  const c=(document.getElementById('ah-c').value||'').trim().toUpperCase();
+  const note=document.getElementById('ah-match');
+  const idx=c?D.holdings.findIndex(h=>(h.c||'').trim().toUpperCase()===c):-1;
+  note.textContent=idx>-1?`Adds to your existing ${c} position — avg buy price is recalculated.`:' ';
+}
+function confirmAddHolding(){
+  const c=(document.getElementById('ah-c').value||'').trim();
+  const n=document.getElementById('ah-n').value.trim();
+  const amt=F.n(document.getElementById('ah-amt').value);
+  const buy=F.n(document.getElementById('ah-buy').value);
+  const sell=F.n(document.getElementById('ah-sell').value);
+  if(!c){alert('Enter a coin symbol.');return}
+  if(!amt||amt<=0){alert('Enter an amount greater than zero.');return}
+  if(buy==null||buy<0){alert('Enter a buy price.');return}
+  const idx=D.holdings.findIndex(h=>(h.c||'').trim().toUpperCase()===c.toUpperCase());
+  if(idx>-1){
+    const h=D.holdings[idx];
+    const oldAmt=h.amt||0,oldBuy=h.buy||0,newAmt=oldAmt+amt;
+    h.buy=newAmt?((oldAmt*oldBuy)+(amt*buy))/newAmt:buy;
+    h.amt=newAmt;
+    if(n)h.n=n;
+    if(sell!=null)h.sell=sell;
+  }else{
+    D.holdings.push({n,c:c.toUpperCase(),id:'',amt,buy,sell:sell,disc:true,levels:[]});
+  }
+  save();closeModal();renderAll();backfillLogos();
+  toast(idx>-1?`Added to ${c.toUpperCase()} ✓`:`${c.toUpperCase()} position added ✓`);
+}
+
+/* ---------- REALISED ---------- */
+function renderTrades(){
+  const b=realisedBuckets();
+  document.querySelector('#trades tbody').innerHTML=D.trades.map((t,i)=>{
+    const pr=toAud((t.qty||0)*(t.sell||0))||0;
+    const cb=toAud((t.qty||0)*(t.buy||0))||0;
+    const g=pr-cb;
+    return `<tr>
+      <td class="l" data-label="Coin"><input data-fkey="t${i}-c" value="${F.esc(t.c)}" placeholder="COIN" style="font-weight:600" oninput="upT(${i},'c',this.value,1)"></td>
+      <td data-label="Qty sold"><input type="text" inputmode="decimal" data-fkey="t${i}-qty" value="${t.qty??''}" placeholder="0" oninput="upT(${i},'qty',this.value)"></td>
+      <td data-label="Cost/unit"><input type="text" inputmode="decimal" data-fkey="t${i}-buy" value="${t.buy??''}" placeholder="0" oninput="upT(${i},'buy',this.value)"></td>
+      <td data-label="Sell price"><input type="text" inputmode="decimal" data-fkey="t${i}-sell" value="${t.sell??''}" placeholder="0" oninput="upT(${i},'sell',this.value)"></td>
+      <td class="calc dim" data-label="Cost base">${F.m(cb)}</td>
+      <td class="calc dim" data-label="Proceeds">${F.m(pr)}</td>
+      <td class="calc ${g>=0?'pos':'neg'}" style="font-weight:600" data-label="Gain / loss">${g>=0?'+':''}${F.m(g)}</td>
+      <td class="l" data-label="CGT"><button class="chip ${t.disc?'on':''}" onclick="upT(${i},'disc',!D.trades[${i}].disc,1)">${t.disc?'12m+':'&lt;12m'}</button></td>
+      <td class="l" data-label="Reinvested?"><button class="chip ${t.reinvested!==false?'on':''}" title="Was this money put back into the portfolio? Affects &quot;Total invested&quot; if it was a loss." onclick="upT(${i},'reinvested',D.trades[${i}].reinvested===false,1)">${t.reinvested!==false?'Yes':'No'}</button></td>
+      <td><button class="del" onclick="delTrade(${i})">&times;</button></td>
+    </tr>`}).join('')||`<tr><td colspan="10"><div class="empty"><b>Nothing sold yet</b>Use the Sell button on a holding, or add a past sell manually.</div></td></tr>`;
+  document.getElementById('r-cost').textContent=F.m(b.cost);
+  document.getElementById('r-proc').textContent=F.m(b.proceeds);
+  const rg=document.getElementById('r-gain');
+  rg.textContent=(b.gain>=0?'+':'')+F.m(b.gain);
+  rg.className=b.gain>=0?'pos':'neg';
+  document.getElementById('r-count').textContent=D.trades.length+' trade'+(D.trades.length===1?'':'s');
+}
+function upT(i,k,v,raw){D.trades[i][k]=raw?v:F.n(v);save();withFocusPreserved(renderAll)}
+function delTrade(i){askConfirm('Delete this sell? It will stop offsetting your gains.',()=>{D.trades.splice(i,1);save();renderAll()})}
+/* add-sell modal — merges into an existing sell row for the same coin
+   (only when the 12-month status also matches, so the CGT split stays correct) */
+function openAddTrade(){
+  openModal(`<h3>Add past sell <button onclick="closeModal()">&times;</button></h3>
+    <div class="form">
+      <div class="fld"><label>Coin</label>
+        <input id="at-c" placeholder="e.g. SUI" style="text-transform:uppercase" oninput="atMatch()">
+        <div class="note" id="at-match">&nbsp;</div>
+      </div>
+      <div class="fld"><label>Quantity sold</label><input id="at-qty" type="number" step="any" placeholder="0"></div>
+      <div class="fld"><label>Cost per unit (AUD)</label><input id="at-buy" type="number" step="any" placeholder="0"></div>
+      <div class="fld"><label>Sell price (AUD)</label><input id="at-sell" type="number" step="any" placeholder="0"></div>
+      <div class="fld"><label>Held 12 months or more</label><select id="at-disc" onchange="atMatch()"><option value="1">Yes — 50% discount applies</option><option value="0">No — full gain taxed</option></select></div>
+      <div class="fld"><label>Was this money reinvested?</label>
+        <select id="at-reinv"><option value="1">Yes — went back into the portfolio</option><option value="0">No — kept as cash / withdrawn</option></select>
+        <div class="note">Only matters if this sells at a loss — a reinvested loss still counts toward "Total invested"; cashed-out money doesn't.</div>
+      </div>
+      <button class="act solid" style="width:100%;padding:10px" onclick="confirmAddTrade()">Add</button>
+    </div>`);
+  setTimeout(()=>document.getElementById('at-c').focus(),50);
+}
+function atMatch(){
+  const c=(document.getElementById('at-c').value||'').trim().toUpperCase();
+  const disc=document.getElementById('at-disc').value==='1';
+  const note=document.getElementById('at-match');
+  const idx=c?D.trades.findIndex(t=>(t.c||'').trim().toUpperCase()===c&&!!t.disc===disc):-1;
+  note.textContent=idx>-1?`Adds to your existing ${c} sell — qty and costs are combined.`:' ';
+}
+function confirmAddTrade(){
+  const c=(document.getElementById('at-c').value||'').trim();
+  const d=new Date().toISOString().slice(0,10);
+  const qty=F.n(document.getElementById('at-qty').value);
+  const buy=F.n(document.getElementById('at-buy').value);
+  const sell=F.n(document.getElementById('at-sell').value);
+  const disc=document.getElementById('at-disc').value==='1';
+  const reinvested=document.getElementById('at-reinv').value==='1';
+  if(!c){alert('Enter a coin symbol.');return}
+  if(!qty||qty<=0){alert('Enter a quantity greater than zero.');return}
+  if(buy==null||sell==null){alert('Enter both cost and sell price.');return}
+  const idx=D.trades.findIndex(t=>(t.c||'').trim().toUpperCase()===c.toUpperCase()&&!!t.disc===disc);
+  if(idx>-1){
+    const t=D.trades[idx];
+    const oldQty=t.qty||0,newQty=oldQty+qty;
+    t.buy=newQty?((oldQty*(t.buy||0))+(qty*buy))/newQty:buy;
+    t.sell=newQty?((oldQty*(t.sell||0))+(qty*sell))/newQty:sell;
+    t.qty=newQty;
+    if(d>t.d)t.d=d;
+  }else{
+    D.trades.unshift({d,c:c.toUpperCase(),qty,buy,sell,disc,reinvested});
+  }
+  save();closeModal();renderAll();
+  toast(idx>-1?`Added to ${c.toUpperCase()} sell ✓`:`${c.toUpperCase()} sell added ✓`);
+}
+
+/* ---------- TAX ---------- */
+function renderTax(){
+  const r=realisedCGT();
+  document.getElementById('x-g').textContent=F.m(r.gD+r.gF);
+  const xl=document.getElementById('x-l');
+  xl.textContent=F.m(r.loss);xl.className='v mono '+(r.loss?'neg':'');
+  document.getElementById('x-avail').textContent=F.m(r.carryOut);
+  document.getElementById('x-tax').textContent=F.m(r.tax);
+  document.getElementById('x-taxsub').textContent=r.net
+    ? F.p(marginalOnGain(r.net))+' effective · '+topBand(r.net)
+    : 'no gain to tax';
+  document.getElementById('flatrow').style.display=D.method==='flat'?'':'none';
+
+  const row=(k,v,cls,rule,big)=>`<dt class="${rule?'rule ':''}${big?'big':''}">${k}</dt><dd class="${rule?'rule ':''}${big?'big ':''}${cls||''}">${v}</dd>`;
+
+  document.getElementById('kv-real').innerHTML=
+    row('Discountable gains (12m+)',F.m(r.gD))+
+    row('Non-discountable gains',F.m(r.gF))+
+    row('Capital losses this year',F.m(r.loss),'neg')+
+    row('Prior-year losses',F.m(D.carry||0),'neg')+
+    row('Losses applied to gains','−'+F.m(r.usedLoss),'neg','rule')+
+    row('50% discount applied','−'+F.m(r.discounted),'neg')+
+    row('Net capital gain',F.m(r.net),'','rule',1)+
+    row('Tax payable',F.m(r.tax),'neg')+
+    row('Losses left to carry forward',F.m(r.carryOut),r.carryOut?'pos':'dim','rule');
+
+  const p=projectedCGT(false), TR=totRev();
+  document.getElementById('kv-proj').innerHTML=
+    row('Total proceeds (sold + targets)',F.m(p.proceeds))+
+    row('Discountable gains',F.m(p.gD))+
+    row('Non-discountable gains',F.m(p.gF))+
+    row('Total losses available',F.m(p.pool),'neg')+
+    row('Losses applied','−'+F.m(p.usedLoss),'neg','rule')+
+    row('50% discount applied','−'+F.m(p.discounted),'neg')+
+    row('Net capital gain',F.m(p.net),'','rule',1)+
+    row('Total tax payable',F.m(p.tax),'neg')+
+    row('Proceeds after tax',F.m(p.proceeds-p.tax),'pos','rule',1)+
+    row('Tax rate on the gain',F.p(marginalOnGain(p.net)),'dim')+
+    row('Reaches',topBand(p.net),'dim')+
+    row('Tax as % of proceeds',F.p(p.proceeds?p.tax/p.proceeds:0),'dim');
+}
+
+/* ---------- PLAN ---------- */
+let planLast={};
+function renderPlan(){
+  const box=document.getElementById('planlist');
+  if(!D.holdings.length){box.innerHTML=`<div class="empty"><b>Nothing to plan</b>Add positions in the Tracker first.</div>`;return}
+  const open=[...box.querySelectorAll('.coinblock.open')].map(e=>e.dataset.c);
+  box.innerHTML=D.holdings.map((h,i)=>{
+    const L=h.levels||[];
+    const pctSum=L.reduce((s,l)=>s+(l.pct||0),0);
+    const p=live(h);
+    let sold=0,revSum=0;
+    const rows=L.map((l,j)=>{
+      const q=(h.amt||0)*((l.pct||0)/100);
+      sold+=q;const r=afterFee(toAud(q*(l.p||0)))||0;revSum+=r;
+      const left=(h.amt||0)-sold;
+      const lp=toAud(l.p);
+      const away=p&&lp?(lp-p)/p:null;
+      const hit=away!=null&&away<=0;
+      return `<tr class="${hit?'lvl-hit':''}">
+        <td class="l calc dim" style="padding-left:15px" data-label="Level">L${j+1}</td>
+        <td data-label="Sell price"><input type="text" inputmode="decimal" data-fkey="l${i}-${j}-p" value="${l.p??''}" placeholder="0" oninput="upL(${i},${j},'p',this.value)"></td>
+        <td data-label="% of bag"><input type="text" inputmode="decimal" data-fkey="l${i}-${j}-pct" value="${l.pct??''}" placeholder="0" oninput="upL(${i},${j},'pct',this.value)"></td>
+        <td class="calc dim" data-label="Tokens sold">${F.q(q)}</td>
+        <td class="calc dim" data-label="Remaining">${F.q(left)}</td>
+        <td class="calc" data-label="Revenue (AUD)">${F.m(r)}</td>
+        <td class="calc ${hit?'pos':'dim'}" style="${hit?'font-weight:600':''}" data-label="To level">${away==null?'—':hit?'hit':'+'+(away*100).toFixed(0)+'%'}</td>
+        <td><button class="del" onclick="delL(${i},${j})">&times;</button></td>
+      </tr>`}).join('');
+    const wavg=(h.amt||0)&&pctSum?revSum/((h.amt||0)*pctSum/100):0;
+    const ok=Math.abs(pctSum-100)<0.01;
+    const st=levelStatus(h,p);
+    let finalSt=null;
+    if(L.length){
+      const last=L[L.length-1];
+      const lastP=toAud(last.p);
+      const lastAway=p&&lastP?(lastP-p)/p:null;
+      const lastHit=lastAway!=null&&lastAway<=0;
+      finalSt={hit:lastHit,label:lastAway==null?'—':lastHit?'L'+L.length+' hit':'+'+(lastAway*100).toFixed(0)+'% to L'+L.length};
+    }
+    const key=h.c||i;
+    const prevF=planLast[key]||{};
+    const firstFlash=!suppressAnim&&st&&prevF.first!==undefined&&prevF.first!==st.label?'flash':'';
+    const finalFlash=!suppressAnim&&finalSt&&prevF.final!==undefined&&prevF.final!==finalSt.label?'flash':'';
+    planLast[key]={first:st?st.label:undefined,final:finalSt?finalSt.label:undefined};
+    return `<div class="coinblock ${open.includes(h.c)?'open':''}" data-c="${F.esc(h.c)}">
+      <div class="chead" onclick="this.parentNode.classList.toggle('open')">
+        <span class="chev">&#9654;</span><span class="sym" style="padding:0">${F.logo(h.img)}${F.esc(h.c)||'—'}</span>
+        <span class="meta">
+          ${st?`<span>first <b class="${st.hit?'pos':'dim'} ${firstFlash}">${st.label}</b></span>`:''}
+          ${finalSt?`<span>final <b class="${finalSt.hit?'pos':'dim'} ${finalFlash}">${finalSt.label}</b></span>`:''}
+          <span>allocated <b class="${ok?'pos':'neg'}">${pctSum.toFixed(0)}%</b></span>
+          <span>revenue <b>${F.m(revSum)}</b></span>
+        </span>
+      </div>
+      <div class="cbody"><div class="cbodyinner">
+        ${L.length?`<div class="scroll"><table class="stacktable" style="min-width:680px"><thead><tr>
+          <th class="l" style="padding-left:15px">Level</th><th>Sell price</th><th>% of bag</th>
+          <th>Tokens sold</th><th>Remaining</th><th>Revenue (AUD)</th><th>To level</th><th></th>
+        </tr></thead><tbody>${rows}</tbody></table></div>`:''}
+        <div class="alert ${ok?'ok':'bad'}">${ok?`Fully allocated. Weighted average exit ${wavg?F.price(wavg)+' AUD':'—'}.`:(pctSum>100?`Over-allocated by ${(pctSum-100).toFixed(1)}% — you can't sell more than you hold.`:`${(100-pctSum).toFixed(1)}% of the bag has no exit level yet.`)}</div>
+        <div class="bar" style="border-top:0;padding-bottom:0"><button class="act solid tax" onclick="addL(${i})">+ Add level</button></div>
+      </div></div>
+    </div>`}).join('');
+}
+function upL(i,j,k,v){D.holdings[i].levels[j][k]=F.n(v);save();withFocusPreserved(renderPlan)}
+function addL(i){(D.holdings[i].levels=D.holdings[i].levels||[]).push({p:null,pct:null});save();renderPlan()}
+function delL(i,j){D.holdings[i].levels.splice(j,1);save();renderPlan()}
+
+/* ---------- BUYS ---------- */
+function renderBuys(){
+  let ta=0,tr=0,offCount=0;
+  document.querySelector('#buytable tbody').innerHTML=D.buys.map((b,i)=>{
+    const tb2=toAud(b.buy);
+    const tok=tb2?(b.alloc||0)/tb2:0;
+    const r=afterFee(toAud(tok*(b.sell||0)))||0;
+    const m=b.buy?(b.sell||0)/b.buy:null;
+    const p=b.id&&PX[b.id]?PX[b.id].aud:null;
+    const gap=p&&tb2?(p-tb2)/tb2:null;
+    const on=b.active!==false;
+    if(on){ta+=b.alloc||0;tr+=r}else offCount++;
+    return `<tr class="${suppressAnim?(on?'':'dim'):(on?'rowin':'rowin dim')}" style="animation-delay:${suppressAnim?0:Math.min(i*30,300)}ms;${on?'':'opacity:.45'}">
+      <td class="l" data-label="On"><input type="checkbox" ${on?'checked':''} onchange="toggleBuyActive(${i})" title="Include in totals &amp; combined calculations"></td>
+      <td class="l" data-label="Narrative"><input class="narr" data-fkey="b${i}-n" value="${F.esc(b.n)}" placeholder="narrative" oninput="upB(${i},'n',this.value,1)"></td>
+      <td class="l" data-label="Coin"><div style="display:flex;align-items:center;gap:6px">${F.logo(b.img)}<input data-fkey="b${i}-c" value="${F.esc(b.c)}" placeholder="COIN" style="font-weight:600" oninput="upB(${i},'c',this.value,1)"></div></td>
+      <td class="l" data-label="Price feed"><button class="chip ${b.id?'':'unset'}" onclick="openSearch('b',${i})">${F.esc(b.id)||'link feed'}</button></td>
+      <td data-label="Allocation"><input type="text" inputmode="decimal" data-fkey="b${i}-alloc" value="${b.alloc??''}" placeholder="0" oninput="upB(${i},'alloc',this.value)"></td>
+      <td data-label="Target buy"><input type="text" inputmode="decimal" data-fkey="b${i}-buy" value="${b.buy??''}" placeholder="0" oninput="upB(${i},'buy',this.value)"></td>
+      <td class="calc dim" id="buyp-${i}" data-label="Live price">${F.price(p)}</td>
+      <td class="calc ${gap<=0?'pos':'neg'}" data-label="vs target">${gap==null?'—':(gap<=0?'':'+')+(gap*100).toFixed(0)+'%'}</td>
+      <td class="calc dim" data-label="Tokens">${F.q(tok)}</td>
+      <td data-label="Target sell"><input type="text" inputmode="decimal" data-fkey="b${i}-sell" value="${b.sell??''}" placeholder="0" oninput="upB(${i},'sell',this.value)"></td>
+      <td class="calc" data-label="Multiple">${F.x(m)}</td>
+      <td class="calc pos" id="buyr-${i}" data-label="Revenue">${F.m(r)}</td>
+      <td><button class="del" onclick="delBuy(${i})">&times;</button></td>
+    </tr>`}).join('')||`<tr><td colspan="13"><div class="empty"><b>No planned buys</b>Queue up where your next capital goes.</div></td></tr>`;
+  D.buys.forEach((b,i)=>{
+    const tb2=toAud(b.buy);
+    const tok=tb2?(b.alloc||0)/tb2:0;
+    const r=afterFee(toAud(tok*(b.sell||0)))||0;
+    const p=b.id&&PX[b.id]?PX[b.id].aud:null;
+    animateValueKeyed('buyp-'+i,document.getElementById('buyp-'+i),p,v=>F.price(v));
+    animateValueKeyed('buyr-'+i,document.getElementById('buyr-'+i),r,v=>F.m(v));
+  });
+  animateValue(document.getElementById('bt-alloc'),ta,v=>F.m(v));
+  animateValue(document.getElementById('bt-rev'),tr,v=>F.m(v));
+  animateValue(document.getElementById('b-total'),ta,v=>F.m(v));
+  animateValue(document.getElementById('b-count'),D.buys.length,v=>Math.round(v));
+  animateValue(document.getElementById('b-rev'),tr,v=>F.m(v));
+  document.getElementById('bt-note').textContent=offCount?`(${offCount} off, excluded)`:'';
+
+  /* combined: this queue's active buys + the tracker's own open-position
+     exit plan, so the two forward-looking revenue sources sit together */
+  const cgt=combinedBuysCGT();
+  animateValue(document.getElementById('cb-rev'),cgt.proceeds,v=>F.m(v));
+  const net=cgt.proceeds-cgt.tax;
+  animateValue(document.getElementById('cb-net'),net,v=>F.m(v));
+  const GT=goalTot(),GTpre=goalTotPreTax(cgt);
+  /* this pre-tax goal is solved against the *combined* book (holdings +
+     planned buys), so it differs from the Goals tab's holdings-only figure —
+     lower, because the planned buys add cost base that never gets taxed.
+     Spelled out in the label so the two don't look like a contradiction */
+  document.getElementById('cb-revsub').textContent=GTpre?`of ${F.m(GTpre)} goal (before tax, incl. buys)`:'add a goal amount in the Goals tab';
+  document.getElementById('cb-goalsub').textContent=GT?`of ${F.m(GT)} goal (after tax)`:'add a goal amount in the Goals tab';
+}
+function toggleBuyActive(i){D.buys[i].active=D.buys[i].active===false;save();renderBuys()}
+function upB(i,k,v,txt){D.buys[i][k]=txt?v:F.n(v);save();withFocusPreserved(renderBuys)}
+function addBuy(){D.buys.push({n:'',c:'',id:'',alloc:null,buy:null,sell:null,st:'Watching',active:true});save();renderBuys()}
+function delBuy(i){D.buys.splice(i,1);save();renderBuys()}
+/* revenue + CGT combining open holdings (tracker's own exit plan) with
+   the buy queue's active entries — a forward-looking "if I also land
+   every planned buy and sell everything at target" scenario */
+function combinedBuysCGT(){
+  const rb=realisedBuckets();
+  // see projectedCGT: only cashed-out proceeds get added on top of current
+  // holdings' value — reinvested proceeds are already inside that value
+  let gD=rb.gD,gF=rb.gF,loss=rb.loss,proceeds=rb.proceedsCashedOut;
+  D.holdings.forEach(h=>{
+    const px=toAud(h.sell);
+    if(px==null)return;
+    const pr=afterFee(px*(h.amt||0))||0, cb=inv(h);
+    proceeds+=pr;
+    const g=pr-cb;
+    if(g>=0){h.disc!==false?gD+=g:gF+=g}else loss+=-g;
+  });
+  D.buys.forEach(b=>{
+    if(b.active===false)return;
+    const tb2=toAud(b.buy);
+    if(!tb2)return;
+    const tok=(b.alloc||0)/tb2;
+    const pr=afterFee(toAud(tok*(b.sell||0)))||0;
+    const cb=b.alloc||0;
+    proceeds+=pr;
+    const g=pr-cb;
+    if(g>=0)gD+=g;else loss+=-g;
+  });
+  const r=applyCGT(gD,gF,loss+(D.carry||0));
+  return Object.assign({gD,gF,loss,proceeds,pool:loss+(D.carry||0)},r);
+}
+
+/* ---------- GOALS ---------- */
+function renderGoals(){
+  document.getElementById('goallist').innerHTML=D.goals.map((g,i)=>`<div class="goalrow">
+    <input data-fkey="g${i}-n" value="${F.esc(g.n)}" placeholder="Goal name" oninput="upG(${i},'n',this.value,1)">
+    <input class="num" type="text" inputmode="decimal" data-fkey="g${i}-v" value="${g.v??''}" placeholder="0" oninput="upG(${i},'v',this.value)">
+    <button class="del" onclick="delGoal(${i})">&times;</button>
+  </div>`).join('')||`<div class="empty"><b>No goals set</b>What is this portfolio actually for?</div>`;
+
+  const GT=goalTot(), GTpre=goalTotPreTax();
+  const pT=projectedCGT(false), pL=projectedCGT(true);
+  const grossT=pT.proceeds, grossL=pL.proceeds;
+  const netT=pT.proceeds-pT.tax;
+  const setBar=(pfx,val,goal,label)=>{
+    const pct=goal?val/goal:0;
+    document.getElementById(pfx+'-pct').textContent=val?F.p(pct):'—';
+    const f=document.getElementById(pfx+'-fill');
+    f.style.width=Math.min(Math.max(pct,0)*100,100)+'%';
+    f.className='fill'+(pct>=1?' over':'');
+    document.getElementById(pfx+'-have').textContent=val?F.m(val)+' '+label:'—';
+    document.getElementById(pfx+'-need').textContent=F.m(goal)+' needed';
+  };
+  setBar('p',grossT,GTpre,'before tax');setBar('pat',netT,GT,'after tax');
+  setBar('p2',grossL,GTpre,'before tax');
+
+  const row=(k,v,cls,rule,big)=>`<dt class="${rule?'rule ':''}${big?'big':''}">${k}</dt><dd class="${rule?'rule ':''}${big?'big ':''}${cls||''}">${v}</dd>`;
+  const gap=grossT-GTpre;
+  document.getElementById('g-total').textContent=F.m(GT)+' after tax';
+  document.getElementById('g-total-pretax').textContent=F.m(GTpre)+' pre-tax';
+  document.getElementById('kv-goal').innerHTML=
+    row('Goal total (after tax)',F.m(GT))+
+    row('Goal total (pre-tax, holdings only)',F.m(GTpre),'dim')+
+    row('Open cost basis',F.m(totInv()))+
+    row('Proceeds before tax',F.m(grossT),'','rule',1)+
+    row('CGT if sold at targets',F.m(pT.tax),'neg')+
+    row('Surplus / shortfall (pre-tax)',(gap>=0?'+':'')+F.m(gap),gap>=0?'pos':'neg');
+  renderHomeGauge();
+}
+function upG(i,k,v,txt){D.goals[i][k]=txt?v:F.n(v);save();withFocusPreserved(renderGoals)}
+function addGoal(){D.goals.push({n:'',v:null});save();renderGoals()}
+function delGoal(i){D.goals.splice(i,1);save();renderGoals()}
+
+/* ---------- backup ---------- */
+function exportData(){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(D,null,2)],{type:'application/json'}));
+  a.download='exit-portfolio-sync.json';
+  a.click();
+  D.lastBackup=Date.now();save();
+  toast('Backup exported ✓');
+}
+function importData(){
+  // the file picker is async and user-driven — an <input> that's never
+  // attached to the page has nothing keeping it alive while that dialog is
+  // open, so some browsers (Safari especially) can silently garbage-collect
+  // it before the user finishes picking, dropping the 'change' event with
+  // no error at all. Keep it in the DOM (off-screen) until it's done.
+  const f=document.createElement('input');
+  f.type='file';f.accept='.json';f.style.cssText='position:fixed;top:-9999px;left:-9999px';
+  document.body.appendChild(f);
+  f.onchange=e=>{const r=new FileReader();
+    r.onload=()=>{try{D=JSON.parse(r.result);normalize();save();refresh();toast('Backup imported ✓')}catch(x){alert("That file couldn't be read. Pick a JSON export from this app.")}finally{f.remove()}};
+    r.onerror=()=>{alert("That file couldn't be read. Pick a JSON export from this app.");f.remove()};
+    if(e.target.files[0])r.readAsText(e.target.files[0]);else f.remove()};
+  f.click();
+}
+
+function renderAll(){renderHome();renderHoldings();renderStats();renderTrades();renderTax();renderPlan();renderBuys();renderGoals()}
+
+const TAB_ORDER=[...document.querySelectorAll('nav button')].map(b=>b.dataset.t);
+const BOTTOMBAR_OVERFLOW=['buys','goals']; // tabs tucked under the bottom bar's "More" button
+function activateTab(t){
+  const btn=document.querySelector(`nav button[data-t="${t}"]`);
+  if(!btn)return;
+  const prevT=document.querySelector('nav button.on')?.dataset.t;
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('section').forEach(x=>x.classList.remove('on','slide-l','slide-r'));
+  btn.classList.add('on');
+  const newSec=document.getElementById(t);
+  const prevIdx=TAB_ORDER.indexOf(prevT),newIdx=TAB_ORDER.indexOf(t);
+  if(prevT&&prevT!==t&&prevIdx>-1&&newIdx>-1){
+    newSec.classList.add(newIdx>prevIdx?'slide-r':'slide-l');
+    void newSec.offsetWidth; // force reflow so the animation restarts even if this section carried the same class recently
+  }
+  newSec.classList.add('on');
+  btn.scrollIntoView({block:'nearest',inline:'nearest'});
+
+  const bar=document.getElementById('bottombar');
+  if(bar){
+    bar.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+    const barBtn=bar.querySelector(`button[data-t="${t}"]`);
+    if(barBtn)barBtn.classList.add('on');
+    else if(BOTTOMBAR_OVERFLOW.includes(t))document.getElementById('morebtn').classList.add('on');
+  }
+}
+function openMoreSheet(){
+  openModal(`<h3>More <button onclick="closeModal()">&times;</button></h3>
+    <div style="padding:6px 8px 10px">
+      <button class="moreitem" onclick="closeModal();activateTab('buys')">
+        <svg viewBox="0 0 24 24"><path d="M12 3v10M12 13l4-4M12 13 8 9"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
+        Future Buys
+      </button>
+      <button class="moreitem" onclick="closeModal();activateTab('goals')">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+        Goals
+      </button>
+    </div>`);
+}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>activateTab(b.dataset.t));
+
+/* mobile: swipe left/right anywhere on the page to move between tabs (like
+   paging through screens), AND pull down at the very top of the page to
+   refresh prices — both single-finger gestures on the whole document, so
+   they share one set of listeners and lock onto whichever axis the drag
+   turns out to be once it's clearly one or the other. Tab-swipe is skipped
+   when it starts inside something that scrolls horizontally on its own
+   (wide tables) so it doesn't fight with scrolling through those. */
+(function(){
+  const PTR_THRESHOLD=64,PTR_MAX=100;
+  const ptr=document.getElementById('ptr'),ptrLabel=document.getElementById('ptrlabel');
+  let sx=0,sy=0,tracking=false,skipSwipe=false,canPTR=false,axis=null,ptrPulling=false;
+  function setPtr(px,ready){
+    ptr.style.setProperty('--ptr-h',px+'px');
+    ptr.style.setProperty('--ptr-op',Math.min(px/PTR_THRESHOLD,1));
+    ptr.style.setProperty('--ptr-rot',(px/PTR_THRESHOLD*180)+'deg');
+    ptrLabel.textContent=ready?'Release to refresh':'Pull to refresh';
+  }
+  function collapsePtr(){
+    ptr.classList.add('snap');
+    setPtr(0,false);
+    setTimeout(()=>ptr.classList.remove('snap'),260);
+  }
+  document.addEventListener('touchstart',e=>{
+    if(window.innerWidth>640||e.touches.length!==1){tracking=false;return}
+    const t=e.touches[0];
+    sx=t.clientX;sy=t.clientY;tracking=true;axis=null;ptrPulling=false;
+    const scroller=e.target.closest&&e.target.closest('.scroll');
+    skipSwipe=!!(scroller&&scroller.scrollWidth>scroller.clientWidth+1);
+    canPTR=(document.scrollingElement.scrollTop||0)<=1&&!ptr.classList.contains('loading');
+  },{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(!tracking)return;
+    const t=e.touches[0];
+    const dx=t.clientX-sx,dy=t.clientY-sy;
+    if(!axis){
+      if(Math.abs(dx)<10&&Math.abs(dy)<10)return;
+      axis=Math.abs(dx)>Math.abs(dy)?'x':'y';
+    }
+    if(axis==='y'&&canPTR&&dy>0){
+      ptrPulling=true;
+      e.preventDefault();
+      const pulled=Math.min(dy*0.5,PTR_MAX);
+      setPtr(pulled,pulled>=PTR_THRESHOLD);
+    }
+  },{passive:false});
+  document.addEventListener('touchend',async e=>{
+    if(!tracking){return}
+    tracking=false;
+    if(ptrPulling){
+      const h=parseFloat(ptr.style.getPropertyValue('--ptr-h'))||0;
+      if(h>=PTR_THRESHOLD){
+        ptr.classList.add('loading');ptrLabel.textContent='Refreshing…';
+        setPtr(PTR_THRESHOLD,true);
+        await refresh();
+        ptr.classList.remove('loading');
+      }
+      collapsePtr();
+      return;
+    }
+    if(skipSwipe||axis!=='x')return;
+    const t=e.changedTouches[0];
+    const dx=t.clientX-sx,dy=t.clientY-sy;
+    if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.5)return;
+    const cur=TAB_ORDER.indexOf(document.querySelector('nav button.on').dataset.t);
+    if(cur<0)return;
+    if(dx<0&&cur<TAB_ORDER.length-1)activateTab(TAB_ORDER[cur+1]);
+    else if(dx>0&&cur>0)activateTab(TAB_ORDER[cur-1]);
+  },{passive:true});
+})();
+load();initSecs();renderAll();refresh();backfillLogos();loadRanks();
+setInterval(()=>{if(!document.hidden)refresh()},90000);
+setInterval(()=>{if(!document.hidden)loadRanks()},300000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&stamp&&Date.now()-stamp>90000)refresh()});
+</script>
+</body>
+</html>
